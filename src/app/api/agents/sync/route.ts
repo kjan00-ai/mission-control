@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { syncAgentsFromConfig, previewSyncDiff } from '@/lib/agent-sync'
-import { syncLocalAgents } from '@/lib/local-agent-sync'
+import { syncLocalAgents, syncProjectAgents } from '@/lib/local-agent-sync'
 import { logger } from '@/lib/logger'
 
 /**
@@ -17,6 +17,11 @@ export async function POST(request: NextRequest) {
   const source = searchParams.get('source')
 
   try {
+    if (source === 'projects') {
+      const result = await syncProjectAgents()
+      return NextResponse.json(result)
+    }
+
     if (source === 'local') {
       const result = await syncLocalAgents()
       return NextResponse.json(result)
