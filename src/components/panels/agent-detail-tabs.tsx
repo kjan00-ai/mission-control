@@ -210,6 +210,21 @@ export function OverviewTab({
 
           {/* Key fields */}
           <div className="space-y-3">
+            {/* C4: 표시 이름 (display_name) — 한글 라벨, 편집 가능 */}
+            <div className="grid grid-cols-[100px_1fr] gap-2 items-center text-sm">
+              <span className="text-muted-foreground">표시 이름</span>
+              {editing ? (
+                <input
+                  type="text"
+                  value={formData.display_name ?? ''}
+                  placeholder="예: 프론트엔드 엔지니어"
+                  onChange={(e) => setFormData((prev: any) => ({ ...prev, display_name: e.target.value }))}
+                  className="bg-surface-1 text-foreground border border-border rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
+                />
+              ) : (
+                <span className="text-foreground">{(agent as any).display_name || <span className="text-muted-foreground/60">{agent.name}</span>}</span>
+              )}
+            </div>
             <div className="grid grid-cols-[100px_1fr] gap-2 items-center text-sm">
               <span className="text-muted-foreground">{t('role')}</span>
               {editing ? (

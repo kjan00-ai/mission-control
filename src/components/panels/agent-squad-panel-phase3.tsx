@@ -683,6 +683,7 @@ function AgentDetailModalPhase3({
   const [editing, setEditing] = useState(false)
   const [formData, setFormData] = useState({
     role: agent.role,
+    display_name: (agent as any).display_name || '',
     session_key: agent.session_key || '',
     soul_content: agent.soul_content || '',
     working_memory: agent.working_memory || '',
@@ -718,6 +719,7 @@ function AgentDetailModalPhase3({
     setAgentState(agent as Agent & { config?: any; working_memory?: string })
     setFormData({
       role: agent.role,
+      display_name: (agent as any).display_name || '',
       session_key: agent.session_key || '',
       soul_content: agent.soul_content || '',
       working_memory: (agent as any).working_memory || '',
@@ -855,6 +857,13 @@ function AgentDetailModalPhase3({
         redirectOnUnauthenticated: false,
       })
 
+      // C4: display_name은 PATCH /api/agents/[id]로 별도 저장 (PUT /api/agents가 모르는 컬럼)
+      await apiFetch(`/api/agents/${agentState.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ display_name: (formData as any).display_name || null }),
+        redirectOnUnauthenticated: false,
+      })
+
       setEditing(false)
       onUpdate()
     } catch (error) {
@@ -989,7 +998,7 @@ function AgentDetailModalPhase3({
               <AgentAvatar name={agent.name} size="md" />
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-semibold text-foreground leading-tight truncate">{agentState.name}</h3>
+                  <h3 className="text-lg font-semibold text-foreground leading-tight truncate">{(agentState as any).display_name || agentState.name}</h3>
                   <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${statusBadgeStyles[agentState.status]}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${statusColors[agentState.status]}`} />
                     {agentState.status}
