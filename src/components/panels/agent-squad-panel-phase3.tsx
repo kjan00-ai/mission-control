@@ -55,6 +55,24 @@ const statusColors: Record<string, string> = {
   error: 'bg-red-500',
 }
 
+// C4: .claude/agents 이름 → 역할 라벨 + AI 그룹
+function agentRoleLabel(name: string): string {
+  if (/-engineer$|backend|frontend|ai-/.test(name)) return '개발'
+  if (/-designer$|ui-|ux-/.test(name)) return '디자인'
+  if (/-reviewer$|review|verifier|fact-/.test(name)) return '검토'
+  if (/-migrator$|schema|db-/.test(name)) return 'DB'
+  if (/doc-|sns-|marketer/.test(name)) return '문서/마케팅'
+  if (/qa-|test/.test(name)) return 'QA'
+  if (/pmo|orchestr/.test(name)) return 'PMO'
+  return '기타'
+}
+function agentAiGroup(source?: string | null): string {
+  if (source && source.startsWith('claude-project:')) return 'Claude'
+  if ((source || '').includes('codex')) return 'Codex'
+  if ((source || '').includes('gemini')) return 'Gemini'
+  return ''
+}
+
 const statusBadgeStyles: Record<string, string> = {
   offline: 'bg-slate-500/15 text-slate-300 border-slate-500/30',
   idle: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
@@ -496,23 +514,27 @@ export function AgentSquadPanelPhase3() {
                     <div className="flex items-center gap-2.5 min-w-0">
                       <AgentAvatar name={agent.name} size="md" />
                       <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <h3 className="font-semibold text-foreground truncate">{agent.name}</h3>
-                          {(agent as any).source && (agent as any).source !== 'manual' && (
-                            <span className={`text-2xs px-1.5 py-0.5 rounded-full border ${
-                              (agent as any).source === 'local'
-                                ? 'bg-violet-500/15 text-violet-300 border-violet-500/30'
-                                : (agent as any).source === 'gateway'
-                                  ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
-                                  : 'bg-slate-500/15 text-slate-300 border-slate-500/30'
-                            }`}>
-                              {(agent as any).source}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="font-semibold text-foreground truncate">{(agent as any).display_name || agent.name}</h3>
+                          <span className="text-2xs px-1.5 py-0.5 rounded-full border bg-blue-500/15 text-blue-300 border-blue-500/30">
+                            {agentRoleLabel(agent.name)}
+                          </span>
+                          {agentAiGroup((agent as any).source) && (
+                            <span className="text-2xs px-1.5 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
+                              {agentAiGroup((agent as any).source)}
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {agent.role}{modelName && <> · <span className="font-mono text-muted-foreground/80">{modelName}</span></>}
-                        </p>
+                        {(agent as any).display_name && (
+                          <p className="text-2xs text-muted-foreground/70 font-mono truncate">{agent.name}</p>
+                        )}
+                        {(agent as any).config?.description ? (
+                          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{(agent as any).config.description}</p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground truncate">
+                            {agent.role}{modelName && <> · <span className="font-mono text-muted-foreground/80">{modelName}</span></>}
+                          </p>
+                        )}
                       </div>
                     </div>
 
