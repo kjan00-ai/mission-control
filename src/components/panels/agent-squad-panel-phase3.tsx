@@ -845,22 +845,22 @@ function AgentDetailModalPhase3({
   const handleSave = async () => {
     setSaveBusy(true)
     try {
-      // apiFetch throws on any non-2xx, matching the original throw-on-not-ok.
-      // The catch below only logs. redirectOnUnauthenticated:false preserves the
-      // original no-redirect behavior on auth failure.
-      await apiFetch('/api/agents', {
-        method: 'PUT',
-        body: JSON.stringify({
-          name: agentState.name,
-          ...formData
-        }),
-        redirectOnUnauthenticated: false,
-      })
-
-      // C4: display_name은 PATCH /api/agents/[id]로 별도 저장 (PUT /api/agents가 모르는 컬럼)
+      // C4: display_name은 PATCH /api/agents/[id]로 독립 저장 (PUT 실패와 무관하게 먼저 처리).
+      // PUT /api/agents가 빈 session_key UNIQUE 충돌로 500 나도 display_name은 저장되도록 분리.
       await apiFetch(`/api/agents/${agentState.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ display_name: (formData as any).display_name || null }),
+        redirectOnUnauthenticated: false,
+      })
+
+      // PUT body 구성: 빈 session_key는 제외 (agents.session_key UNIQUE — '' 중복 충돌 방지)
+      const putBody: any = { name: agentState.name, ...formData }
+      if (!putBody.session_key) delete putBody.session_key
+      delete putBody.display_name  // display_name은 위 PATCH에서 처리 (PUT은 모르는 컬럼)
+
+      await apiFetch('/api/agents', {
+        method: 'PUT',
+        body: JSON.stringify(putBody),
         redirectOnUnauthenticated: false,
       })
 
