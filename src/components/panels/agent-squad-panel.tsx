@@ -11,6 +11,8 @@ const log = createClientLogger('AgentSquadPanel')
 interface Agent {
   id: number
   name: string
+  display_name?: string | null
+  source?: string | null
   role: string
   session_key?: string
   soul_content?: string
@@ -41,6 +43,25 @@ const statusIcons: Record<string, string> = {
   idle: '🟢',
   busy: '🟡',
   error: '🔴',
+}
+
+// C4: .claude/agents 이름 → 역할 라벨 (Gemini #B 역할 배지)
+function agentRoleLabel(name: string): string {
+  if (/-engineer$|backend|frontend|ai-/.test(name)) return '개발'
+  if (/-designer$|ui-|ux-/.test(name)) return '디자인'
+  if (/-reviewer$|review|verifier|fact-/.test(name)) return '검토'
+  if (/-migrator$|schema|db-/.test(name)) return 'DB'
+  if (/doc-|sns-|marketer/.test(name)) return '문서/마케팅'
+  if (/qa-|test/.test(name)) return 'QA'
+  if (/pmo|orchestr/.test(name)) return 'PMO'
+  return '기타'
+}
+// C4: AI 그룹 (source 기반)
+function agentAiGroup(source?: string | null): string {
+  if (source && source.startsWith('claude-project:')) return 'Claude'
+  if (source === 'codex' || (source || '').includes('codex')) return 'Codex'
+  if (source === 'gemini' || (source || '').includes('gemini')) return 'Gemini'
+  return 'Local'
 }
 
 export function AgentSquadPanel() {
@@ -217,16 +238,22 @@ export function AgentSquadPanel() {
               >
                 {/* Agent Header */}
                 <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-white text-lg">{agent.name}</h3>
-                      {agent.runtime_type && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-1 text-muted-foreground border border-border/30">
-                          {agent.runtime_type}
-                        </span>
-                      )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-semibold text-white text-lg truncate">{agent.display_name || agent.name}</h3>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-300 border border-blue-700/40">
+                        {agentRoleLabel(agent.name)}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-1 text-muted-foreground border border-border/30">
+                        {agentAiGroup(agent.source)}
+                      </span>
                     </div>
-                    <p className="text-gray-400 text-sm">{agent.role}</p>
+                    {agent.display_name && (
+                      <p className="text-gray-500 text-xs font-mono">{agent.name}</p>
+                    )}
+                    {agent.config?.description && (
+                      <p className="text-gray-400 text-xs mt-1 line-clamp-2">{agent.config.description}</p>
+                    )}
                   </div>
                   
                   <div className="flex items-center gap-2">
