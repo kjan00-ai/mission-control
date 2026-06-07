@@ -1428,6 +1428,20 @@ const migrations: Migration[] = [
       db.exec(`ALTER TABLE mcp_call_log ADD COLUMN signature TEXT DEFAULT NULL`)
       db.exec(`ALTER TABLE mcp_call_log ADD COLUMN public_key TEXT DEFAULT NULL`)
     }
+  },
+  {
+    id: '051_c4_agents_display_name_unique',
+    up(db: Database.Database) {
+      // C4: agents.display_name (화면 한글 이름) + (source,name) 복합 UNIQUE INDEX.
+      // name 단독 UNIQUE는 유지(테이블 재생성 회피 — agents 참조 FK 2개 보호).
+      // ON CONFLICT(source,name) 작동을 위해 복합 UNIQUE INDEX 추가.
+      const cols = db.prepare(`PRAGMA table_info(agents)`).all() as Array<{ name: string }>
+      const has = (c: string) => cols.some((x) => x.name === c)
+      if (!has('display_name')) {
+        db.exec(`ALTER TABLE agents ADD COLUMN display_name TEXT`)
+      }
+      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_source_name ON agents(source, name)`)
+    }
   }
 ]
 
