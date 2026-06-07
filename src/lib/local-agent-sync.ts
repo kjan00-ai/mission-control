@@ -299,6 +299,120 @@ export async function syncLocalAgents(): Promise<{ ok: boolean; message: string 
   }
 }
 
+// ---------------------------------------------------------------------------
+// C4: Per-project .claude/agents scan (source = claude-project:{repo})
+// ---------------------------------------------------------------------------
+
+// Parse all flat .md agent files in a single directory (Claude Code format).
+function scanAgentsInDir(dir: string): DiskAgent[] {
+  const out: DiskAgent[] = []
+  if (!existsSync(dir)) return out
+  let entries: string[]
+  try { entries = readdirSync(dir) } catch { return out }
+  for (const entry of entries) {
+    if (!entry.endsWith('.md') || entry === 'CLAUDE.md' || entry === 'AGENTS.md') continue
+    const fullPath = join(dir, entry)
+    try {
+      if (!statSync(fullPath).isFile()) continue
+      const content = readFileSync(fullPath, 'utf8')
+      const { frontmatter, body } = parseYamlFrontmatter(content)
+      const agentName = frontmatter.name || entry.replace(/\.md$/, '')
+      const configObj: Record<string, unknown> = {}
+      if (frontmatter.model) configObj.model = frontmatter.model
+      if (frontmatter.color) configObj.color = frontmatter.color
+      if (frontmatter.tools) configObj.tools = frontmatter.tools
+      if (frontmatter.description) configObj.description = frontmatter.description
+      out.push({
+        name: agentName,
+        dir: fullPath,
+        role: 'agent',
+        soulContent: body.trim() || null,
+        configContent: Object.keys(configObj).length ? JSON.stringify(configObj) : null,
+        contentHash: sha256(content),
+      })
+    } catch { /* unreadable */ }
+  }
+  return out
+}
+
+// Resolve project repo path via shared ~/.c3-repo-map.json (same rule as relay script).
+function loadRepoMap(): { repoBase: string; knownLocal: Record<string, string> } {
+  try {
+    const raw = readFileSync(join(homedir(), '.c3-repo-map.json'), 'utf8')
+    const m = JSON.parse(raw)
+    return { repoBase: m.repoBase || join(homedir(), 'c3-repos'), knownLocal: m.knownLocal || {} }
+  } catch {
+    return { repoBase: join(homedir(), 'c3-repos'), knownLocal: {} }
+  }
+}
+
+function projectAgentDir(ghRepo: string): string {
+  const map = loadRepoMap()
+  const base = map.knownLocal[ghRepo] || join(map.repoBase, ghRepo.replace(/\//g, '__'))
+  return join(base, '.claude', 'agents')
+}
+
+// Scan all MC projects with github_repo, upsert their .claude/agents into agents table.
+// source = 'claude-project:{repo}', upsert key = (source, name). display_name preserved.
+export async function syncProjectAgents(): Promise<{ ok: boolean; message: string; inserted: number; updated: number; offline: number }> {
+  try {
+    const db = getDatabase()
+    const now = Math.floor(Date.now() / 1000)
+    const projects = db.prepare(
+      `SELECT github_repo FROM projects WHERE github_repo IS NOT NULL AND github_repo != ''`
+    ).all() as Array<{ github_repo: string }>
+
+    let inserted = 0, updated = 0, offline = 0
+
+    const upsert = db.prepare(`
+      INSERT INTO agents (name, role, soul_content, status, source, content_hash, workspace_path, config, created_at, updated_at)
+      VALUES (?, 'agent', ?, 'online', ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(source, name) DO UPDATE SET
+        soul_content = excluded.soul_content,
+        content_hash = excluded.content_hash,
+        workspace_path = excluded.workspace_path,
+        config = excluded.config,
+        status = 'online',
+        updated_at = excluded.updated_at
+    `)
+    const markOffline = db.prepare(`UPDATE agents SET status = 'offline', updated_at = ? WHERE id = ?`)
+
+    for (const { github_repo } of projects) {
+      const source = `claude-project:${github_repo}`
+      const disk = scanAgentsInDir(projectAgentDir(github_repo))
+      const diskNames = new Set(disk.map((a) => a.name))
+      const dbRows = db.prepare(
+        `SELECT id, name FROM agents WHERE source = ?`
+      ).all(source) as Array<{ id: number; name: string }>
+
+      db.transaction(() => {
+        for (const a of disk) {
+          const existed = db.prepare(`SELECT id FROM agents WHERE source = ? AND name = ?`).get(source, a.name)
+          upsert.run(a.name, a.soulContent, source, a.contentHash, a.dir, a.configContent, now, now)
+          if (existed) updated++; else inserted++
+        }
+        for (const row of dbRows) {
+          if (!diskNames.has(row.name)) { markOffline.run(now, row.id); offline++ }
+        }
+      })()
+    }
+
+    const msg = `Project agent sync: ${inserted} added, ${updated} updated, ${offline} offline (${projects.length} projects)`
+    if (inserted > 0 || updated > 0 || offline > 0) {
+      logger.info(msg)
+      logAuditEvent({
+        action: 'project_agent_sync',
+        actor: 'scheduler',
+        detail: { inserted, updated, offline, projects: projects.length },
+      })
+    }
+    return { ok: true, message: msg, inserted, updated, offline }
+  } catch (err: any) {
+    logger.error({ err }, 'Project agent sync failed')
+    return { ok: false, message: `Project agent sync failed: ${err.message}`, inserted: 0, updated: 0, offline: 0 }
+  }
+}
+
 /**
  * Write agent soul content back to disk (UI → Disk direction).
  * Called when a user edits a local agent's soul in the MC UI.
