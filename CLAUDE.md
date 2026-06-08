@@ -103,3 +103,36 @@ OpenAPI spec: `openapi.json`. Interactive docs at `/docs` when running.
 - **better-sqlite3**: Native addon -- needs rebuild when switching Node versions (`pnpm rebuild better-sqlite3`)
 - **AUTH_PASS with `#`**: Quote it (`AUTH_PASS="my#pass"`) or use `AUTH_PASS_B64` (base64-encoded)
 - **Gateway optional**: Set `NEXT_PUBLIC_GATEWAY_OPTIONAL=true` for standalone deployments without gateway connectivity
+
+---
+
+## 🤖 멀티AI 시스템 운영 (이 repo = 멀티AI 시스템 SSOT, 2026-06-09 BC에서 이관)
+
+> ⚠️ **BC(BEST-consulting)와 별개 프로젝트.** 이 mission-control fork = '멀티AI 시스템 + agent웹'의 코드+문서 SSOT. BC repo(`Projects/Ai-Insight/best-consulting-hp`)와 코드·문서·메모리·git 절대 혼입 금지. BC 작업 시 이 컨텍스트 로드 안 함(역도 동일). 경계 결정문: 위키 `projects/mission-control/decisions/2026-06-09-multiagent-bc-boundary-separation.md`.
+>
+> ※ 전역 멀티AI 부트스트랩(Obsidian 위키 연동·신규 프로젝트 자동 적용)은 글로벌 `~/.claude/CLAUDE.md`에 있어 **이 프로젝트에도 자동 적용**된다 — 본 섹션은 그 위에 얹는 MC 고유 운영 세부.
+
+### SSOT
+- **코드+문서**: 이 repo (`~/mission-control`, GitHub kjan00-ai/mission-control, builderz-labs fork). spec/plan/report = `docs/multiagent/`.
+- **지식·진행보고·핸드오프**: 위키 `BestConsulting_OS/wiki/projects/mission-control/` (handoffs/decisions/dev-tasks/errors/reviews/references).
+
+### 세션 시작 시 mandate
+1. **위키 최신 핸드오프 우선 참조**: `wiki/projects/mission-control/handoffs/` 최신 `SESSION-HANDOFF-*.md` 정독 → 차기 진입점 확인.
+   - 현 최신: `SESSION-HANDOFF-c4-t14-20260608.md` (C4 T14 종결: mc-relay 자동처리 + 멱등성 근본수정 / 차기 = ④B 부트스트랩 / keep-alive 영속성 / gateway 자동재기동)
+2. **위키 `_index` 참조** + handoffs `to=claude & status=todo` 스캔.
+3. **핵심 메모리 참조**: 위키 `references/` (reference_wsl_daemon_autostart / reference_mc_relay_idempotency / reference_hermes_skill_execute_code_gate / reference_wsl_shutdown_keepalive_restore / project_multiagent_c_cycle).
+
+### 인프라 좌표 (고정)
+- **대시보드**: `https://agents.bestconsulting.vip` (이 repo + Hermes 실행엔진 / 한국어 + Cloudflare Access / WSL 로컬 + SQLite). ⚠️ 도메인만 BC와 공유, 코드·DB 독립.
+- **Telegram 봇**: `@myroyalaibot` (화이트리스트 User ID 6206674018 / OpenRouter `anthropic/claude-sonnet-4.5`).
+- **실행 환경**: WSL2 Ubuntu, 사용자 `bestconsulting`. Hermes config: `~/.hermes/{config.yaml,.env,SOUL.md,skills/}`.
+- **상시구동**: systemd user(linger) `hermes-gateway`/`mission-control`/`cloudflared-c3` + Windows 작업스케줄러 ONLOGON keep-alive(`sleep infinity`).
+- **mc-relay**: hermes cron(every 1m, `~/.hermes/cron/`)으로 MC task 자동 처리. 연동 스크립트 `~/mission-control/c3_mc_to_hermes.js`(백업 `.c4-tXX-final`). gateway active여야 발동.
+
+### WSL git 작업 함정 (mandate)
+- `cd ~/mission-control`이 Git bash 경유 시 무력화됨(BC cwd 고정). **반드시 `powershell -NoProfile -Command "wsl.exe -d Ubuntu -u bestconsulting --cd /home/bestconsulting/mission-control -- git ..."`** (`--cd` 명시). push EXIT=0 믿지 말고 `git ls-remote`로 remote HEAD 직접 검증.
+- ⚠️ carry: 이 repo는 WSL credential 미설정으로 push 보류 상태(GitHub 인증 필요).
+
+### 진행 상태 (C cycle)
+- C1 Hermes+Telegram ✅ / R6 상시구동 ✅(keep-alive 영속성 carry) / C2 위키보고 ✅ / C3 대시보드 ✅ / C4 3층위 정합 ✅(T1~T14).
+- 차기 carry: ④B 부트스트랩 연동(.claude/agents 자동 등록) / WSL keep-alive 영속성 검증 / gateway 자동재기동 진단(SIGTERM 후 미부활 이력).
