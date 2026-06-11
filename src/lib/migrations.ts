@@ -6,6 +6,10 @@ import type Database from 'better-sqlite3'
 export type Migration = {
   id: string
   up: (db: Database.Database) => void
+  // When false, the runner does NOT wrap up() in a transaction — the migration
+  // manages its own BEGIN/COMMIT. Required for table-recreate migrations that
+  // must toggle `PRAGMA foreign_keys` (a no-op inside a transaction).
+  transactional?: boolean
 }
 
 // Plugin hook: extensions can register additional migrations without modifying this file.
@@ -1442,6 +1446,120 @@ const migrations: Migration[] = [
       }
       db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_source_name ON agents(source, name)`)
     }
+  },
+  {
+    // C4B-0: agents.name 전역 UNIQUE 제거 (둘째 프로젝트 동명 에이전트 허용) +
+    // tasks.agent_id FK (라우팅 주키). 결정: 위키 decisions/2026-06-11-c4b-b1-routing-agent-id.md (대안 B).
+    // transactional:false — 테이블 재생성에 PRAGMA foreign_keys=OFF 필요(트랜잭션 내 no-op).
+    id: '052_c4b0_agents_drop_name_unique_tasks_agent_id',
+    transactional: false,
+    up(db: Database.Database) {
+      const agentsSql = (db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='agents'`).get() as { sql?: string } | undefined)?.sql || ''
+      const nameStillUnique = /\bname\b\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(agentsSql)
+      const tcols = db.prepare(`PRAGMA table_info(tasks)`).all() as Array<{ name: string }>
+      const hasAgentId = tcols.some((c) => c.name === 'agent_id')
+      if (!nameStillUnique && hasAgentId) return // 이미 적용됨(멱등)
+
+      // 안전장치: agents incoming FK가 예상(direct_connections, spawn_history) 2개인지 검증.
+      const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`).all() as Array<{ name: string }>
+      const incoming: string[] = []
+      for (const { name } of tables) {
+        const fks = db.prepare(`PRAGMA foreign_key_list("${name}")`).all() as Array<{ table: string; from: string }>
+        for (const fk of fks) if (fk.table === 'agents') incoming.push(`${name}.${fk.from}`)
+      }
+      if (incoming.length !== 2) {
+        throw new Error(`052: expected exactly 2 incoming FKs to agents, found ${incoming.length}: ${incoming.join(', ')}`)
+      }
+
+      db.pragma('foreign_keys = OFF')
+      try {
+        db.exec('BEGIN')
+        if (nameStillUnique) {
+          // agents 재생성: name UNIQUE 제거, 나머지 18컬럼·기본값·session_key UNIQUE 보존.
+          db.exec(`
+            CREATE TABLE agents_new (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL,
+              role TEXT NOT NULL,
+              session_key TEXT UNIQUE,
+              soul_content TEXT,
+              status TEXT NOT NULL DEFAULT 'offline',
+              last_seen INTEGER,
+              last_activity TEXT,
+              created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+              updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+              config TEXT,
+              workspace_id INTEGER NOT NULL DEFAULT 1,
+              source TEXT DEFAULT 'manual',
+              content_hash TEXT,
+              workspace_path TEXT,
+              hidden INTEGER NOT NULL DEFAULT 0,
+              working_memory TEXT DEFAULT '',
+              runtime_type TEXT DEFAULT NULL,
+              display_name TEXT
+            )
+          `)
+          db.exec(`
+            INSERT INTO agents_new (id, name, role, session_key, soul_content, status, last_seen, last_activity, created_at, updated_at, config, workspace_id, source, content_hash, workspace_path, hidden, working_memory, runtime_type, display_name)
+            SELECT id, name, role, session_key, soul_content, status, last_seen, last_activity, created_at, updated_at, config, workspace_id, source, content_hash, workspace_path, hidden, working_memory, runtime_type, display_name FROM agents
+          `)
+          db.exec(`DROP TABLE agents`)
+          db.exec(`ALTER TABLE agents_new RENAME TO agents`)
+          // 인덱스 복원 (name 단독 UNIQUE는 제외)
+          db.exec(`CREATE INDEX IF NOT EXISTS idx_agents_session_key ON agents(session_key)`)
+          db.exec(`CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status)`)
+          db.exec(`CREATE INDEX IF NOT EXISTS idx_agents_workspace_id ON agents(workspace_id)`)
+          db.exec(`CREATE INDEX IF NOT EXISTS idx_agents_source ON agents(source)`)
+          db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_source_name ON agents(source, name)`)
+        }
+
+        if (!hasAgentId) {
+          db.exec(`ALTER TABLE tasks ADD COLUMN agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL`)
+        }
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_agent_id ON tasks(agent_id)`)
+
+        // 백필: project source 우선(COUNT=1 + workspace 일치), 실패 시 (workspace_id,name) 단일매칭.
+        db.exec(`
+          UPDATE tasks SET agent_id = (
+            SELECT a.id FROM agents a
+            JOIN projects p ON p.id = tasks.project_id AND p.workspace_id = tasks.workspace_id
+            WHERE a.source = 'claude-project:' || p.github_repo AND a.name = tasks.assigned_to
+          )
+          WHERE agent_id IS NULL AND assigned_to IS NOT NULL AND project_id IS NOT NULL
+            AND (
+              SELECT COUNT(*) FROM agents a
+              JOIN projects p ON p.id = tasks.project_id AND p.workspace_id = tasks.workspace_id
+              WHERE a.source = 'claude-project:' || p.github_repo AND a.name = tasks.assigned_to
+            ) = 1
+        `)
+        db.exec(`
+          UPDATE tasks SET agent_id = (
+            SELECT a.id FROM agents a WHERE a.name = tasks.assigned_to AND a.workspace_id = tasks.workspace_id
+          )
+          WHERE agent_id IS NULL AND assigned_to IS NOT NULL
+            AND (
+              SELECT COUNT(*) FROM agents a WHERE a.name = tasks.assigned_to AND a.workspace_id = tasks.workspace_id
+            ) = 1
+        `)
+
+        const fk = db.prepare(`PRAGMA foreign_key_check`).all()
+        if (fk.length) {
+          db.exec('ROLLBACK')
+          throw new Error(`052: foreign_key_check failed: ${JSON.stringify(fk)}`)
+        }
+        db.exec('COMMIT')
+      } catch (e) {
+        try { db.exec('ROLLBACK') } catch { /* already rolled back */ }
+        throw e
+      } finally {
+        db.pragma('foreign_keys = ON')
+      }
+
+      const unmatched = db.prepare(`SELECT COUNT(*) AS c FROM tasks WHERE assigned_to IS NOT NULL AND agent_id IS NULL`).get() as { c: number }
+      if (unmatched.c > 0) {
+        console.log(`[migration 052] backfill: ${unmatched.c} task(s) left with agent_id NULL (legacy/unmatched; dispatch falls back to name).`)
+      }
+    }
   }
 ]
 
@@ -1459,9 +1577,16 @@ export function runMigrations(db: Database.Database) {
 
   for (const migration of [...migrations, ...extraMigrations]) {
     if (applied.has(migration.id)) continue
-    db.transaction(() => {
+    if (migration.transactional === false) {
+      // Migration manages its own transaction (e.g. table-recreate needing
+      // PRAGMA foreign_keys=OFF). Only record success after up() returns.
       migration.up(db)
       db.prepare('INSERT OR IGNORE INTO schema_migrations (id) VALUES (?)').run(migration.id)
-    })()
+    } else {
+      db.transaction(() => {
+        migration.up(db)
+        db.prepare('INSERT OR IGNORE INTO schema_migrations (id) VALUES (?)').run(migration.id)
+      })()
+    }
   }
 }

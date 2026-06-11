@@ -7,7 +7,7 @@
  * date-suffixed titles.
  */
 
-import { getDatabase, db_helpers } from './db'
+import { getDatabase, db_helpers, resolveAgentId } from './db'
 import { logger } from './logger'
 import { isCronDue } from './schedule-parser'
 
@@ -133,12 +133,13 @@ export async function spawnRecurringTasks(): Promise<{ ok: boolean; message: str
           ? db.prepare(`SELECT ticket_counter FROM projects WHERE id = ? AND workspace_id = ?`).get(template.project_id, template.workspace_id) as { ticket_counter: number } | undefined
           : undefined
 
+        const childAgentId = resolveAgentId(template.assigned_to, template.project_id, template.workspace_id)
         const insertResult = db.prepare(`
           INSERT INTO tasks (
             title, description, status, priority, project_id, project_ticket_no,
-            assigned_to, created_by, created_at, updated_at,
+            assigned_to, agent_id, created_by, created_at, updated_at,
             tags, metadata, workspace_id
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           childTitle,
           template.description,
@@ -147,6 +148,7 @@ export async function spawnRecurringTasks(): Promise<{ ok: boolean; message: str
           template.project_id,
           ticketRow?.ticket_counter ?? null,
           template.assigned_to,
+          childAgentId,
           'scheduler',
           nowSec,
           nowSec,

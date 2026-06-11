@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase, Comment, db_helpers } from '@/lib/db';
+import { getDatabase, Comment, db_helpers, resolveAgentId } from '@/lib/db';
 import { requireRole } from '@/lib/auth';
 import { validateBody, createCommentSchema } from '@/lib/validation';
 import { mutationLimiter } from '@/lib/rate-limit';
@@ -219,8 +219,10 @@ export async function POST(
       if (mentionedAgent) {
         autoAssignedTo = mentionedAgent.recipient;
         const newStatus = task.status === 'inbox' ? 'assigned' : task.status;
-        db.prepare('UPDATE tasks SET assigned_to = ?, status = ?, updated_at = ? WHERE id = ? AND workspace_id = ?')
-          .run(autoAssignedTo, newStatus, now, taskId, workspaceId);
+        // C4B-0: keep agent_id (routing key) in sync with the auto-assigned agent.
+        const autoAgentId = resolveAgentId(autoAssignedTo, task.project_id, workspaceId);
+        db.prepare('UPDATE tasks SET assigned_to = ?, agent_id = ?, status = ?, updated_at = ? WHERE id = ? AND workspace_id = ?')
+          .run(autoAssignedTo, autoAgentId, newStatus, now, taskId, workspaceId);
 
         db_helpers.ensureTaskSubscription(taskId, autoAssignedTo, workspaceId);
         db_helpers.createNotification(

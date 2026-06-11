@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDatabase } from '@/lib/db'
+import { getDatabase, resolveAgentId } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
 import { agentTaskLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
@@ -129,6 +129,12 @@ export async function GET(request: NextRequest) {
     `).get(agent, now, workspaceId, agent) as any | undefined
 
     if (claimed) {
+      // C4B-0: keep agent_id (routing key) in sync with the claimed assignee.
+      const claimedAgentId = resolveAgentId(agent, claimed.project_id ?? null, workspaceId)
+      if (claimedAgentId !== (claimed.agent_id ?? null)) {
+        db.prepare('UPDATE tasks SET agent_id = ? WHERE id = ?').run(claimedAgentId, claimed.id)
+        claimed.agent_id = claimedAgentId
+      }
       return NextResponse.json({
         task: mapTaskRow(claimed),
         reason: 'assigned' as QueueReason,
