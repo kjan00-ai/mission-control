@@ -73,7 +73,16 @@ function parseYamlFrontmatter(content: string): { frontmatter: AgentFrontmatter;
     else if (key === 'model') fm.model = cleaned
     else if (key === 'color') fm.color = cleaned
     else if (key === 'tools') {
-      try { fm.tools = JSON.parse(val) } catch { /* ignore */ }
+      // C4B-1: accept both JSON-array form (`tools: ["Read","Edit"]`) and the
+      // Claude Code native comma form (`tools: Read, Edit, Bash`). The kit
+      // templates use the comma form so the same .md is valid for both the
+      // Claude Code subagent loader and this parser.
+      try {
+        const parsed = JSON.parse(val)
+        if (Array.isArray(parsed)) fm.tools = parsed.map((t) => String(t).trim()).filter(Boolean)
+      } catch {
+        fm.tools = cleaned.split(',').map((t) => t.trim()).filter(Boolean)
+      }
     }
   }
   return { frontmatter: fm, body }
@@ -358,9 +367,22 @@ export async function syncProjectAgents(): Promise<{ ok: boolean; message: strin
   try {
     const db = getDatabase()
     const now = Math.floor(Date.now() / 1000)
-    const projects = db.prepare(
-      `SELECT github_repo FROM projects WHERE github_repo IS NOT NULL AND github_repo != ''`
-    ).all() as Array<{ github_repo: string }>
+    // C4B-1: include repo-less projects via local_path (fallback source).
+    // github_repo present → source=claude-project:{repo}, dir via shared repo map.
+    // else local_path present → source=claude-project-id:{id}, dir=local_path/.claude/agents.
+    const hasLocalPath = (db.prepare(`PRAGMA table_info(projects)`).all() as Array<{ name: string }>)
+      .some((c) => c.name === 'local_path')
+    const rows = db.prepare(
+      `SELECT id, github_repo${hasLocalPath ? ', local_path' : ''} FROM projects`
+    ).all() as Array<{ id: number; github_repo: string | null; local_path?: string | null }>
+    const targets: Array<{ source: string; dir: string }> = []
+    for (const r of rows) {
+      if (r.github_repo && r.github_repo.trim()) {
+        targets.push({ source: `claude-project:${r.github_repo}`, dir: projectAgentDir(r.github_repo) })
+      } else if (r.local_path && r.local_path.trim()) {
+        targets.push({ source: `claude-project-id:${r.id}`, dir: join(r.local_path, '.claude', 'agents') })
+      }
+    }
 
     let inserted = 0, updated = 0, offline = 0
 
@@ -377,9 +399,8 @@ export async function syncProjectAgents(): Promise<{ ok: boolean; message: strin
     `)
     const markOffline = db.prepare(`UPDATE agents SET status = 'offline', updated_at = ? WHERE id = ?`)
 
-    for (const { github_repo } of projects) {
-      const source = `claude-project:${github_repo}`
-      const disk = scanAgentsInDir(projectAgentDir(github_repo))
+    for (const { source, dir } of targets) {
+      const disk = scanAgentsInDir(dir)
       const diskNames = new Set(disk.map((a) => a.name))
       const dbRows = db.prepare(
         `SELECT id, name FROM agents WHERE source = ?`
@@ -397,13 +418,13 @@ export async function syncProjectAgents(): Promise<{ ok: boolean; message: strin
       })()
     }
 
-    const msg = `Project agent sync: ${inserted} added, ${updated} updated, ${offline} offline (${projects.length} projects)`
+    const msg = `Project agent sync: ${inserted} added, ${updated} updated, ${offline} offline (${targets.length} projects)`
     if (inserted > 0 || updated > 0 || offline > 0) {
       logger.info(msg)
       logAuditEvent({
         action: 'project_agent_sync',
         actor: 'scheduler',
-        detail: { inserted, updated, offline, projects: projects.length },
+        detail: { inserted, updated, offline, projects: targets.length },
       })
     }
     return { ok: true, message: msg, inserted, updated, offline }

@@ -1560,6 +1560,18 @@ const migrations: Migration[] = [
         console.log(`[migration 052] backfill: ${unmatched.c} task(s) left with agent_id NULL (legacy/unmatched; dispatch falls back to name).`)
       }
     }
+  },
+  {
+    // C4B-1: projects.local_path — repo-less 프로젝트(github_repo 미연결) fallback.
+    // syncProjectAgents가 github_repo 없는 프로젝트는 local_path/.claude/agents 를
+    // source=claude-project-id:{id} 로 스캔할 수 있게 한다. (가역: 컬럼 추가.)
+    id: '053_projects_local_path',
+    up(db: Database.Database) {
+      const cols = db.prepare(`PRAGMA table_info(projects)`).all() as Array<{ name: string }>
+      if (!cols.some((c) => c.name === 'local_path')) {
+        db.exec(`ALTER TABLE projects ADD COLUMN local_path TEXT`)
+      }
+    }
   }
 ]
 

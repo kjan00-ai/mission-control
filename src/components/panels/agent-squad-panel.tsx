@@ -63,6 +63,19 @@ function agentAiGroup(source?: string | null): string {
   if (source === 'gemini' || (source || '').includes('gemini')) return 'Gemini'
   return 'Local'
 }
+// C4B-3: 프로젝트 배지 — 동명 에이전트(frontend-engineer ×N프로젝트) 혼동 방지.
+//   claude-project:{owner/repo} → repo 이름 / claude-project-id:{id} → #id
+function agentProjectLabel(source?: string | null): string | null {
+  if (!source) return null
+  if (source.startsWith('claude-project:')) {
+    const repo = source.slice('claude-project:'.length)
+    return repo.split('/').pop() || repo
+  }
+  if (source.startsWith('claude-project-id:')) {
+    return '#' + source.slice('claude-project-id:'.length)
+  }
+  return null
+}
 
 export function AgentSquadPanel() {
   const t = useTranslations('agentSquad')
@@ -247,6 +260,11 @@ export function AgentSquadPanel() {
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-1 text-muted-foreground border border-border/30">
                         {agentAiGroup(agent.source)}
                       </span>
+                      {agentProjectLabel(agent.source) && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300 border border-purple-700/40" title={agent.source || undefined}>
+                          {agentProjectLabel(agent.source)}
+                        </span>
+                      )}
                     </div>
                     {agent.display_name && (
                       <p className="text-gray-500 text-xs font-mono">{agent.name}</p>
