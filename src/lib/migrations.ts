@@ -1572,6 +1572,72 @@ const migrations: Migration[] = [
         db.exec(`ALTER TABLE projects ADD COLUMN local_path TEXT`)
       }
     }
+  },
+  {
+    // C5-2: L2 durable bus — MAIA 교차검증(Codex ∥ Gemini) 결과를 위키 md 단독에서
+    // 구조화 테이블로 승격해 쿼리·감사·재현·합의신호를 가능케 한다. 쓰기는 WSL writer
+    // (~/.ai-bootstrap/l2-db-writer.js)가 직접 INSERT(서버 비의존, fail-soft). 본 migration이
+    // 스키마 SSOT — writer는 PRAGMA table_info로 드리프트를 fail-soft 감지한다.
+    // (가역: 신규 테이블 2개 + 인덱스, 기존 데이터 무변경.)
+    id: '054_l2_durable_bus',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS l2_reviews (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          run_key TEXT,
+          artifact TEXT NOT NULL,
+          artifact_ref TEXT,
+          project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+          task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+          trigger TEXT NOT NULL DEFAULT 'manual',
+          final_verdict TEXT,
+          status TEXT NOT NULL DEFAULT 'settled',
+          rounds_count INTEGER NOT NULL DEFAULT 1,
+          blocker_count INTEGER NOT NULL DEFAULT 0,
+          important_count INTEGER NOT NULL DEFAULT 0,
+          escalation_count INTEGER NOT NULL DEFAULT 0,
+          consensus_blocker_count INTEGER NOT NULL DEFAULT 0,
+          content_hash TEXT,
+          agg_ref TEXT,
+          reviewers TEXT,
+          metadata TEXT,
+          workspace_id INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          completed_at INTEGER
+        )
+      `)
+      // run_key = aggregation file name (embeds a unique YYYYMMDD-HHMMSS stamp per run) → idempotent
+      // re-insert (writer uses ON CONFLICT DO NOTHING). UNIQUE on a nullable col allows multiple NULLs
+      // (SQLite), so legacy/keyless rows never collide. (L2 finding be274c5c — 중복 승격 방지.)
+      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_l2_reviews_run_key ON l2_reviews(run_key)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_l2_reviews_artifact ON l2_reviews(artifact)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_l2_reviews_content_hash ON l2_reviews(content_hash)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_l2_reviews_status ON l2_reviews(status)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_l2_reviews_created_at ON l2_reviews(created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_l2_reviews_project_id ON l2_reviews(project_id)`)
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS l2_rounds (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          review_id INTEGER NOT NULL REFERENCES l2_reviews(id) ON DELETE CASCADE,
+          round INTEGER NOT NULL,
+          kind TEXT NOT NULL DEFAULT 'initial',
+          reviewers TEXT,
+          overall_verdict TEXT,
+          canonical_items TEXT,
+          settled_count INTEGER NOT NULL DEFAULT 0,
+          deepen_count INTEGER NOT NULL DEFAULT 0,
+          escalate_count INTEGER NOT NULL DEFAULT 0,
+          parser_fails TEXT,
+          raw_refs TEXT,
+          agg_ref TEXT,
+          workspace_id INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_l2_rounds_review_id ON l2_rounds(review_id)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_l2_rounds_round ON l2_rounds(round)`)
+    }
   }
 ]
 
