@@ -74,13 +74,13 @@
 |---|---|---|---|
 | **E0** | 자율 실행 + 사후검증 | — (즉시) | 완전가역·저위험 |
 | **E1** | 자율 실행 + **사전 가드(스냅샷·드라이런·사전 L2)** | — (즉시, 가드 후) | C6 T2의 "자율+사전L2+스냅샷" 인코딩 |
-| **E2** | **지연 실행 + veto창**, timeout → **자동 실행** | 자동 실행 | 회수창 가역(R1)·되돌림 쉬움 |
-| **E3** | **지연 실행 + veto창**, timeout → **자동 차단/명시승인 대기** | 자동 차단 | 비가역 잔여(R3 residual) |
+| **E2** | **지연 실행 + veto창(opt-out)**, timeout → **자동 실행** | 자동 실행 | 회수창 가역(R1)·되돌림 쉬움 |
+| **E3** | **지연 실행 + 승인창(approval, opt-in)**, timeout → **자동 차단/명시승인 대기** | 자동 차단 | 비가역 잔여(R3 residual) |
 
 ★ **E2 시점 정의(L2 round2 codex)**: E2 레코드는 `vetoDeadline`(veto 마감)·`scheduledExecutionAt`(실제 실행 예정시각)·`irreversibilityDeadline`(이 시점 넘으면 R3로 전이)을 갖는다. 외부발신처럼 `vetoDeadline = irreversibilityDeadline`(발신=비가역)이면 timeout 자동실행이 곧 R3 진입이므로, 그런 작업은 E2가 아니라 **E3로 분류**(발신 전 차단 기본). E2는 "창 만료 후에도 되돌릴 수 있는" 경우에만.
 | **DENY** | **즉시 차단**(absorbing) | — | hard-deny(force push·secret 등) |
 
-★ E2/E3는 **타임아웃 기본동작으로 구분**(gemini 중요): 둘 다 veto창이지만 무응답 시 E2는 진행, E3는 차단. 운영자에게 "이 지연은 풀리면 실행되나 막히나"가 명확.
+★ E2/E3는 **타임아웃 기본동작으로 구분**(gemini 중요): E2=veto창(opt-out, 무응답=진행) ≠ E3=승인창(approval, opt-in, 무응답=차단). 둘 다 "veto"라 부르면 의미 혼동(C6-0.1 L2 codex 지적) → E2만 veto, E3는 approval. 운영자에게 "이 지연은 풀리면 실행되나 막히나"가 명확.
 
 ---
 
