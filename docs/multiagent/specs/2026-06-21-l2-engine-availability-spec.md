@@ -12,7 +12,7 @@ impl:
   P2: "done — l2-launch detached 런처, 브리지/네이티브 폴백 양경로 실증 (455669a)"
   P3: "skipped — P2 즉시 네이티브 폴백이 24h-드롭 우려를 흡수. 둘다실패 희귀케이스는 기존 24h 재시도가 백스톱"
   P4: "done — maia-wsl-healthwatch.js + Windows 스케줄(15m) + hermes-free Telegram, 실발송 검증 (44861ed)"
-known_gap: "~/.claude/hooks 는 git 미추적 → post-task-l2.js 변경은 라이브+배포본엔 있으나 git 이력엔 없음(MAIA 인프라 기존 갭, 본 트랙 무관)"
+known_gap: "RESOLVED(18d8973): hooks git 미추적 갭 해소 — 실로직 git-tracked ~/.ai-bootstrap/hooks/, ~/.claude/hooks=정적 fail-open shim. 호출경로 불변, WSL·Windows 게이트 라이브 검증."
 ---
 
 # L2 엔진 가용성 — WSL 단일의존 제거 (독립 트랙, C6 선행)
