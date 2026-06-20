@@ -3,10 +3,16 @@ intent: spec
 project: mission-control
 date: 2026-06-21
 author: claude
-version: v0.2 (L2 round1+2 반영 — blocker 2·important 7 전건 수정)
+version: v0.3 (구현 완료 — P1·P2·P4 / P3 의도적 스킵)
 track: L2-AVAIL (독립 트랙 — C6 선행)
-status: L2-converged
+status: implemented (P1+P2+P4)
 l2_ref: "[[2026-06-21-l2-engine-availability-spec-l2-deepen-r2-20260621-045822]]"
+impl:
+  P1: "done — l2-loop wslOnly→shared, Windows 네이티브 codex+gemini 실증 (ai-bootstrap 6126b97)"
+  P2: "done — l2-launch detached 런처, 브리지/네이티브 폴백 양경로 실증 (455669a)"
+  P3: "skipped — P2 즉시 네이티브 폴백이 24h-드롭 우려를 흡수. 둘다실패 희귀케이스는 기존 24h 재시도가 백스톱"
+  P4: "done — maia-wsl-healthwatch.js + Windows 스케줄(15m) + hermes-free Telegram, 실발송 검증 (44861ed)"
+known_gap: "~/.claude/hooks 는 git 미추적 → post-task-l2.js 변경은 라이브+배포본엔 있으나 git 이력엔 없음(MAIA 인프라 기존 갭, 본 트랙 무관)"
 ---
 
 # L2 엔진 가용성 — WSL 단일의존 제거 (독립 트랙, C6 선행)
