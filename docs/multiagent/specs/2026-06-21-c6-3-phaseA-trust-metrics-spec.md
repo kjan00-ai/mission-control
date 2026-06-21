@@ -3,10 +3,11 @@ intent: spec
 project: mission-control
 date: 2026-06-21
 author: claude
-version: v0.2 (L2 round1~3 반영 — blocker 3·important 5 전건 수정)
+version: v0.3 (구현 완료)
 track: C6-3 Phase A (신뢰계측 — cutover 선행)
-status: L2-converged
+status: implemented
 l2_ref: "[[2026-06-21-c6-3-phasea-trust-metrics-spec-l2-deepen-r3-20260621-143439]]"
+impl: "done — c6-trust.js + 4 골든픽스처 (ai-bootstrap 061ec93). 종단 1533 op(85.5% 합치·🚨10·🏷️144). 선결(미구현): Phase A.5 모달응답 로깅 → 그 후에만 Phase B 가능. Phase B(실제 cutover)=대표 게이트, 미착수."
 ---
 
 # C6-3 Phase A — 신뢰계측 (모달→검증 cutover의 안전 선행)
