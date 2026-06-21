@@ -112,7 +112,8 @@
     "collapseSidebar": "Свернуть боковую панель",
     "expandSidebar": "Развернуть боковую панель",
     "more": "Ещё",
-    "logout": "Выйти"
+    "logout": "Выйти",
+    "decisions": "Decisions"
   },
   "settings": {
     "language": "Язык",
@@ -2195,5 +2196,17 @@
     "tabStatus": "Статус",
     "unhealthy": "Нездоров",
     "unreachable": "Недоступен"
+  },
+  "decisionProposal": {
+    "title": "Decision Approvals",
+    "subtitle": "C6 async approval queue (E3)",
+    "pendingBadge": "{count} pending",
+    "approve": "Approve",
+    "veto": "Veto",
+    "approved": "Approved",
+    "vetoed": "Vetoed",
+    "noPending": "No proposals awaiting approval.",
+    "loading": "Loading...",
+    "failedAction": "Action failed."
   }
 }

@@ -112,7 +112,8 @@
     },
     "collapseSidebar": "Collapse sidebar",
     "expandSidebar": "Expand sidebar",
-    "more": "More"
+    "more": "More",
+    "decisions": "Decisions"
   },
   "settings": {
     "language": "Language",
@@ -771,7 +772,6 @@
     "colFailed": "Failed",
     "retryTask": "Retry Task",
     "colDone": "Done",
-    "colFailed": "Failed",
     "recurring": "RECURRING",
     "spawned": "SPAWNED",
     "spawnedFromTask": "Spawned from task #{id}",
@@ -2200,5 +2200,17 @@
     "restarting": "Restarting...",
     "diagnosing": "Diagnosing...",
     "notInstalled": "Not installed"
+  },
+  "decisionProposal": {
+    "title": "Decision Approvals",
+    "subtitle": "C6 async approval queue (E3)",
+    "pendingBadge": "{count} pending",
+    "approve": "Approve",
+    "veto": "Veto",
+    "approved": "Approved",
+    "vetoed": "Vetoed",
+    "noPending": "No proposals awaiting approval.",
+    "loading": "Loading...",
+    "failedAction": "Action failed."
   }
 }

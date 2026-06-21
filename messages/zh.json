@@ -112,7 +112,8 @@
     "collapseSidebar": "折叠侧边栏",
     "expandSidebar": "展开侧边栏",
     "more": "更多",
-    "logout": "登出"
+    "logout": "登出",
+    "decisions": "Decisions"
   },
   "settings": {
     "language": "语言",
@@ -2195,5 +2196,17 @@
     "tabStatus": "状态",
     "unhealthy": "不健康",
     "unreachable": "不可达"
+  },
+  "decisionProposal": {
+    "title": "Decision Approvals",
+    "subtitle": "C6 async approval queue (E3)",
+    "pendingBadge": "{count} pending",
+    "approve": "Approve",
+    "veto": "Veto",
+    "approved": "Approved",
+    "vetoed": "Vetoed",
+    "noPending": "No proposals awaiting approval.",
+    "loading": "Loading...",
+    "failedAction": "Action failed."
   }
 }

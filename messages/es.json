@@ -112,7 +112,8 @@
     "collapseSidebar": "Contraer barra lateral",
     "expandSidebar": "Expandir barra lateral",
     "more": "Más",
-    "logout": "Cerrar sesión"
+    "logout": "Cerrar sesión",
+    "decisions": "Decisions"
   },
   "settings": {
     "language": "Idioma",
@@ -2195,5 +2196,17 @@
     "tabStatus": "Estado",
     "unhealthy": "No saludable",
     "unreachable": "Inaccesible"
+  },
+  "decisionProposal": {
+    "title": "Decision Approvals",
+    "subtitle": "C6 async approval queue (E3)",
+    "pendingBadge": "{count} pending",
+    "approve": "Approve",
+    "veto": "Veto",
+    "approved": "Approved",
+    "vetoed": "Vetoed",
+    "noPending": "No proposals awaiting approval.",
+    "loading": "Loading...",
+    "failedAction": "Action failed."
   }
 }

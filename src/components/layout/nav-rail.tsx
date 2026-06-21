@@ -47,6 +47,7 @@ const navGroups: NavGroup[] = [
       { id: 'cost-tracker', label: 'Cost Tracker', icon: <TokensIcon />, priority: false },
       { id: 'nodes', label: 'Nodes', icon: <NodesIcon />, priority: false },
       { id: 'exec-approvals', label: 'Approvals', icon: <ApprovalsIcon />, priority: false },
+      { id: 'decision-proposals', label: 'Decisions', icon: <DecisionsIcon />, priority: false },
       { id: 'office', label: 'Office', icon: <OfficeIcon />, priority: false },
       { id: 'monitor', label: 'Monitor', icon: <MonitorIcon />, priority: false },
     ],
@@ -96,6 +97,7 @@ const navItemTranslationKeys: Record<string, string> = {
   'cost-tracker': 'costTracker',
   nodes: 'nodes',
   'exec-approvals': 'approvals',
+  'decision-proposals': 'decisions',
   office: 'office',
   cron: 'cron',
   webhooks: 'webhooks',
@@ -1500,6 +1502,17 @@ function ApprovalsIcon() {
       <path d="M8 1v4M4.5 3l2 2M11.5 3l-2 2" />
       <rect x="2" y="6" width="12" height="9" rx="1.5" />
       <path d="M5.5 10.5l2 2 3.5-4" />
+    </svg>
+  )
+}
+
+function DecisionsIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 1.5v4M8 5.5L4 8M8 5.5L12 8" />
+      <circle cx="8" cy="2" r="1" />
+      <path d="M2 8h4l-2 4-2-4zM10 8h4l-2 4-2-4z" />
+      <path d="M6 14h4" />
     </svg>
   )
 }
