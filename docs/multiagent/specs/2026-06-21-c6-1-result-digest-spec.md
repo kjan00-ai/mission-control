@@ -3,10 +3,11 @@ intent: spec
 project: mission-control
 date: 2026-06-21
 author: claude
-version: v0.2 (L2 round1+2 반영 — blocker 3·important 6 전건 수정)
+version: v0.3 (구현 완료)
 track: C6-1 (결과 다이제스트 MVP)
-status: L2-converged
+status: implemented
 l2_ref: "[[2026-06-21-c6-1-result-digest-spec-l2-deepen-r2-20260621-060218]]"
+impl: "done — c6-digest.js + 7 골든픽스처 (ai-bootstrap 6434aef). 종단 1493 op 검증. 잔여(선택): 일배치 스케줄 등록 + 세션종료 훅 연동(후속)."
 ---
 
 # C6-1 — 결과 다이제스트 MVP (Verification over Approval)
