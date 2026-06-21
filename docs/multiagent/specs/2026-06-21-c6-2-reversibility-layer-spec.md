@@ -3,10 +3,11 @@ intent: spec
 project: mission-control
 date: 2026-06-21
 author: claude
-version: v0.2 (L2 round1~3 반영 — blocker 2·important 6 전건 수정)
+version: v0.3 (구현 완료)
 track: C6-2 (가역화 레이어 MVP)
-status: L2-converged
+status: implemented
 l2_ref: "[[2026-06-21-c6-2-reversibility-layer-spec-l2-deepen-r3-20260621-142008]]"
+impl: "done — c6-revpush.js + 게이트 deny-reason 신호 (ai-bootstrap d9d0d2a). e2e 로컬 bare remote 검증. 잔여(후속): gh PR 자동화·pre-push 투명 리다이렉트·다른 가역화 후보(soft-delete 등)·자동 gc 스케줄."
 ---
 
 # C6-2 — 가역화 레이어 MVP (protected push → 브랜치 + PR)
