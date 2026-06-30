@@ -40,6 +40,7 @@ refs:
 
 ## 3. c6-ready 연결 (진입점3 placeholder 실가동)
 - c6-ready `readBus` 옆에 `readLeak()` 추가: `state/c6-leak.json` 읽어 `l2.leakRate` 주입(없으면 null 유지).
+  - ★ 소비자 계약(L2 f3ea73e6): c6-leak 출력 `measured:boolean`을 읽어 `measured===false || leakRate===null` ⇒ **fail-closed**(null→0 오독 차단). readLeak()는 파일 부재·measured false 모두 leakRate=null 주입.
 - decideReady leak 게이트(이미 구현):
   - `leakPipelineLive=false`(기본) → 여전히 placeholder fail-closed (배관 신뢰 전 보수).
   - 대표가 배관 검증 후 `c6-policy.ready.leakPipelineLive=true` flip → `leakRate===null`(표본부족) = fail-closed / `leakRate ≥ leakMax` = fail-closed / else 통과.
