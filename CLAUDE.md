@@ -117,8 +117,8 @@ OpenAPI spec: `openapi.json`. Interactive docs at `/docs` when running.
 - **지식·진행보고·핸드오프**: 위키 `BestConsulting_OS/wiki/projects/mission-control/` (handoffs/decisions/dev-tasks/errors/reviews/references).
 
 ### 세션 시작 시 mandate
-1. **위키 최신 핸드오프 우선 참조**: `wiki/projects/mission-control/handoffs/` 최신 `SESSION-HANDOFF-*.md` 정독 → 차기 진입점 확인.
-   - 현 최신: `SESSION-HANDOFF-c4-t14-20260608.md` (C4 T14 종결: mc-relay 자동처리 + 멱등성 근본수정 / 차기 = ④B 부트스트랩 / keep-alive 영속성 / gateway 자동재기동)
+1. **위키 최신 핸드오프 우선 참조**: 위키 `_index.md`가 가리키는 **최신 `[[핸드오프]]`를 추적**해 정독 → 차기 진입점 확인. 인덱스가 불명확하면 `wiki/projects/mission-control/handoffs/`에서 **파일명 날짜가 가장 최신인** `SESSION-HANDOFF-*.md`를 읽는다.
+   - ⚠️ 고정 파일명 금지: 작업이 진행될수록 어긋난다(전역 "Obsidian Wiki 연동" + SF 규약과 일치). **항상 `_index.md` → 최신 핸드오프 경로로 추적**할 것.
 2. **위키 `_index` 참조** + handoffs `to=claude & status=todo` 스캔.
 3. **핵심 메모리 참조**: 위키 `references/` (reference_wsl_daemon_autostart / reference_mc_relay_idempotency / reference_hermes_skill_execute_code_gate / reference_wsl_shutdown_keepalive_restore / project_multiagent_c_cycle).
 
@@ -131,7 +131,7 @@ OpenAPI spec: `openapi.json`. Interactive docs at `/docs` when running.
 
 ### WSL git 작업 함정 (mandate)
 - `cd ~/mission-control`이 Git bash 경유 시 무력화됨(BC cwd 고정). **반드시 `powershell -NoProfile -Command "wsl.exe -d Ubuntu -u bestconsulting --cd /home/bestconsulting/mission-control -- git ..."`** (`--cd` 명시). push EXIT=0 믿지 말고 `git ls-remote`로 remote HEAD 직접 검증.
-- ⚠️ carry: 이 repo는 WSL credential 미설정으로 push 보류 상태(GitHub 인증 필요).
+- ✅ credential 설정됨(2026-07-02 검증): WSL에서 `git -C /home/bestconsulting/mission-control push` 직접 push 성공(`e846ab2`)·`ls-remote` 검증. 과거 "credential 미설정 push 보류" carry는 **해소**. (ai-bootstrap도 동일, `66afd2d`.) ※ 세션이 이미 WSL 내부면 line 위 `powershell ... wsl.exe --cd` 래퍼 불필요 — `git -C <경로>`로 직접.
 
 ### 진행 상태 (C cycle)
 - C1 Hermes+Telegram ✅ / R6 상시구동 ✅(keep-alive 영속성 carry) / C2 위키보고 ✅ / C3 대시보드 ✅ / C4 3층위 정합 ✅(T1~T14).
