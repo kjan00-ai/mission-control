@@ -4,7 +4,7 @@
 - **작성일**: 2026-07-03
 - **상위계획**: [[2026-07-02-glm52-poc-plan]] §1.5·§3·§5·§6-5 / 결정문서 [[2026-07-02-glm-remaining-decisions]] D-2(`2b825150`)
 - **하네스 위치**: `~/.glm-poc/calibration/`(격리, repo 밖) — fixtures·answer-key·score.mjs·README
-- **상태**: 구현+자기검증+**동기 L2(codex∥gemini) 반영 완료** — settled 6건 반영(4 직접 + 2 역량구현/default-off), **대표 판정 대기 3건**(§7)
+- **상태**: 구현+자기검증+**동기 L2(codex∥gemini) 반영 완료** — settled 6건 반영. **대표 판정 3건 = ✅ 전부 활성 확정(옵션A, 2026-07-03)** → answer-key v1.1.0·lock v3·재-L2 완료(§7.3). 승격 게이트(§5-2) 개방됨.
 
 > ⚠️ 이 스펙은 상위계획 §6-4/5의 "정답셋·분모·채점 스크립트를 **착수 전 고정**"(D-2 `2b825150` 대표 판정)을 이행한다.
 > 캘리브레이션의 목적은 GLM 채점이 아니라 **"우리 L2 패널(Codex∥Gemini∥Claude)이 GLM 오류를 실제로 거르는지"** 를 seeded-bug로 보증하는 것(§1.5 2층 평가 모델).
@@ -32,26 +32,26 @@
 - **채점 단위**: 버그 1건 = 1점, **부분발견 불인정**. 매칭 = 파일 일치 + 앵커 키워드 ≥`minAnchors`(정답셋별 `answer-key.json`에 지정). line은 window 보너스만(AI의 line 보고 불안정성 대비).
 - **커버리지 모델(L2 `ea02a2e6` 반영)**: 어떤 finding이든 한 버그에 앵커 매칭하면 그 버그 "발견"(중복 지목 허용, 오탐 오집계 방지). 미매칭 finding = 오탐(FP).
 - **PASS(현행 = D-2 대표확정)**: critical 발견 **100%(3/3)** AND 전체 발견율 **≥80%(≥8/10)**. (상위계획 GO-4 "critical 미탐=즉시실격"과 정합)
-- **오탐률** = 미매칭 지목 / **벤더가 제출한 findings 총수(len)** (분모 명확화 = L2 `b737f7bd` 대표 에스컬레이션 반영안). **현행 보고용 — pass판정 미포함(D-2)**.
+- **오탐률** = 미매칭 지목 / **벤더가 제출한 findings 총수(len)** (분모 명확화 = L2 `b737f7bd` 대표 에스컬레이션 반영안). **PASS 조건 포함(대표 승인 2026-07-03, `fpRateMax=0.5`).**
 - **패널 집계 = union(L2 `ea02a2e6`)**: 벤더별 findings 합집합의 커버리지로 PASS 판정(실배포 "패널 중 누구든 잡으면 잡힌 것" 반영) + **벤더별 진단 병기**(약한 벤더 가시화). `score.mjs --union <a> <b> <c>`.
-- ⚠️ **대표 게이트 제안(L2 corroborated이나 D-2 대표확정 기준 변경이라 미반영·역량만 구현)**:
-  - `2c71f1a1`: 오탐률을 PASS에 포함(대량추측 gaming 차단). `answer-key.json thresholds.fpRateMax`(현 `null`) → 대표 승인 시 값(예 0.5) 설정.
-  - `bb25a0bb`: logic 카테고리 최소 발견률(현재 critical·style 다 맞히면 logic 2건 놓쳐도 8/10 통과). `thresholds.categoryFloors`(현 `null`) → 예 `{"logic":0.75}`.
-  - **둘 다 `score.mjs`에 구현 완료·default-off(null=D-2 현행). 활성화=threshold 값 설정 1줄 + 대표 승인.**
+- ✅ **대표 승인 활성 (2026-07-03, 옵션A — answer-key v1.1.0)**:
+  - `2c71f1a1`: 오탐률을 PASS에 포함(대량추측 gaming 차단). `thresholds.fpRateMax = 0.5`(정밀도 ≥50%).
+  - `bb25a0bb`: logic 카테고리 최소 발견률(critical·style만 맞히고 logic 2건 놓치는 8/10 회피 차단). `thresholds.categoryFloors = {"logic":0.75}`.
+  - **둘 다 `score.mjs`에 구현 완료. 활성화=answer-key threshold 값 설정 + lock v3 재생성 + §4 해시표 갱신 + 재-L2 완료.**
 
 ## 4. 재현성 lock (L2 blocker `2e97acc1`·`30b474f7` 반영)
 - **정답셋 SSOT = `~/.glm-poc/calibration/answer-key.json`**: 앵커 목록·`minAnchors`·`window`·`thresholds`의 **정본**. 본 스펙은 그 계약을 서술하며, 실제 값은 answer-key가 규정(구현자 임의 변경 차단).
-- **해시락(sha256, 2026-07-03 lock v2)** — 아래 값이 바뀌면 = 하네스 변경 → **version bump + 본 스펙 갱신 + 재-L2 의무**. **실행 전 자동 검증 게이트**(`score.mjs`가 `lock.json` 대비 fixtures·answer-key 재해시 대조, 불일치 시 exit 3 중단 — L2 `e6f10382` 반영):
+- **해시락(sha256, 2026-07-03 lock v3 — 대표 승인 강화 3건 활성 반영, answer-key v1.1.0)** — 아래 값이 바뀌면 = 하네스 변경 → **version bump + 본 스펙 갱신 + 재-L2 의무**. **실행 전 자동 검증 게이트**(`score.mjs`가 `lock.json` 대비 fixtures·answer-key 재해시 대조, 불일치 시 exit 3 중단 — L2 `e6f10382` 반영):
   | 파일 | sha256 |
   |---|---|
   | `fixtures/agents-route.ts` | `62872103ee262503e39e10493f4000d39fe13d24772a2eaf65464affcc97e97b` |
   | `fixtures/token-cost.ts` | `7e2d8956574ca9072aca82f96d6fcead198efc61dd0bc084b3bc0a35e50a3f21` |
   | `fixtures/task-queue.ts` | `0064f543b16bec9fccd556254f59485142844216ad93f2cd776395827865b61c` |
-  | `answer-key.json` | `ce22a8b3697d6c4d742e905365fda2c42a1a09aa5523dbff6e37039c5bf95b92` |
+  | `answer-key.json` | `c17b90f2185e74d76645b95152e7208dbdc25b5f74a7cb251a054fba3d51377c` |
   | `score.mjs` | `47136980a8a771d939d73666e7a37abe1911abb82e515bb03e9112d65a805e0b` |
-  | `lock.json` (런타임 게이트 매니페스트) | `17f3a2a9eac86f27c3f61c8801c84feb46671d6d6a9834c072bd23fb2ffff65e` |
+  | `lock.json` (런타임 게이트 매니페스트) | `5beedf2e15bc80269611150f28dab7b2d9fcd7a4a6397b30682cd8e39370c107` |
   > ⚠️ answer-key/fixture 편집 시 `lock.json` 재생성 + 본 표 갱신 + 재-L2. `thresholds.fpRateMax`/`categoryFloors` 활성화(대표 승인)도 answer-key 해시 변경 → bump.
-- **findings.json 스키마** (벤더 제출 입력): `[{file: string, line?: number, category?: string, severity?: string, title?: string, description?: string}, ...]` 또는 `{findings|bugs|issues: [...]}`. 매칭은 `file` + `title|description|category`(소문자 결합) 앵커로 판정.
+- **findings.json 스키마** (벤더 제출 입력): `[{file: string, line?: number, category?: string, severity?: string, title?: string, description?: string}, ...]` 또는 `{findings|bugs|issues: [...]}`. 매칭은 `file` + `title|description|category`(소문자 결합) 앵커로 판정. ⚠️ **`category`는 앵커 매칭 텍스트의 선택 입력일 뿐** — `categoryFloors`(logic 하한)는 **정답셋(answer-key) 버그의 category**로 산정하므로 finding의 `category` 누락/오기와 무관(L2 `eb2b6c9e` 명확화).
 - 자기검증(2026-07-03): 완전탐지→PASS/exit0, critical(B03) 미탐→FAIL/exit1, 패널 union(A logic∥B style)→union PASS·벤더별 FAIL 확인. 스크립트 결정론적(모델·난수 미사용).
 
 ## 5. 사용 흐름 (상위계획 §6)
@@ -97,7 +97,8 @@
 - `c02f6e29` (blocker, gemini제기·codex반박): fpRateMax/floors 미확정=착수전고정 위반. → §5-2 승격게이트로 흡수(대표 3건 결정을 캘리브레이션 실행 전 관문화).
 - `bc52241e` (important, gemini제기·codex반박): 셔플 재측정 부담. → §5-3(c) 스테이트리스 CLI는 셔플 불요로 완화.
 
-### 7.3 대표 판정 대기 3건 (§3 참조)
-- `2c71f1a1` (corroborated): 오탐률 PASS 반영(gaming 차단). D-2 "보고용" 확정 변경 → 대표 게이트. `fpRateMax` default-off 구현済.
-- `bb25a0bb` (corroborated): logic 카테고리 하한. D-2 통과선 강화 → 대표 게이트. `categoryFloors` default-off 구현済.
-- `b737f7bd` (🚩 escalation r1): 오탐률 분모 모호. **반영안=분모를 "벤더 제출 findings 총수(len)"로 명확화**(§3 반영, 대표 확인).
+### 7.3 대표 판정 3건 — ✅ 전부 활성 확정 (옵션A, 2026-07-03 대표 승인)
+- `2c71f1a1` ✅ **활성**: 오탐률 PASS 반영(gaming 차단). `thresholds.fpRateMax = 0.5`(정밀도 ≥50%). D-2 "보고용" → PASS 조건 승격.
+- `bb25a0bb` ✅ **활성**: logic 카테고리 하한. `thresholds.categoryFloors = {"logic":0.75}`(logic 4건 중 ≥3). D-2 통과선 강화.
+- `b737f7bd` ✅ **확정**: 오탐률 분모 = "벤더 제출 findings 총수(len)"(§3·score.mjs 반영).
+- 활성 반영: answer-key v1.1.0 · lock v3 · §4 해시표 갱신 · 재-L2 완료. 최종 PASS = critical 100% AND 전체 ≥80% AND logic ≥75% AND 오탐률 ≤50%. 라이브 자기검증(완전탐지 PASS·gaming FAIL(fpRate)·logic맹점 FAIL(floor)) 통과.
