@@ -1,8 +1,12 @@
 # Verified Autonomy — Gate Redesign Spec (2026-07-03, v6 — 설계 동결)
 
 > **한 줄**: 인간 게이트를 "모든 가역 작업 앞"에서 "비가역 전이 앞"으로 옮기고, 사전승인 대신 **근거기록(사전 스냅샷) + 필수·블로킹 검증(에이전트가 수행) + 가역 폴백**으로 안전을 담보한다.
+> ⚠️ **C7 로드맵 관계(2026-07-04, L2 확정)**: [[2026-07-04-va-c7-reconciliation-analysis]]. (a) §0.5 자기수정 보호목록 ↔ 로드맵 A2 보호집합이 **불일치(manifest T2 vs T3·settings hook)** → 통일 필요(W1). (b) §2.2 블로킹 검증은 **A1(L2 네이티브 전환) 완료 후에만 hardblock 승격** — 그 전엔 informed/advisory(신뢰못할 CLI L2로 hardblock 금지). (c) §2.2는 **B.1 인간관측 증거(검토된 holdback 거부0)를 포함하지 않음 → 별도 보존**(미검토≠증거, Silent Trigger 방지). (d) C6 **queue 존속**(VA 미포함 비가역 T3 표면).
 > 대표 지시 4건 수렴(2026-07-03): ①시간절약([[maia-founding-purpose-save-owner-time]]) ②T2 형식모달→근거·검증·폴백([[t2-modal-formal-replace-with-evidence-verify-fallback]]) ③선택지 사전검증([[verify-decision-options-before-asking-owner]]) ④L2 강제·재시도·fail-closed([[l2-verification-mandatory-no-skip-retry-failclosed]]).
-> **자기수정 보호 대상 정본(canonical, §1·§2·§4 전부 이 목록 참조)**: `~/.ai-bootstrap/decision-policy.json` · `~/.ai-bootstrap/c6-policy.json` · `~/.ai-bootstrap/risk-classify.js` · `~/.ai-bootstrap/policy-classify.js` · `~/.ai-bootstrap/maia-manifest.json` · `~/.ai-bootstrap/hooks/*`(+ 배포본 `~/.claude/hooks/*`). 편집=A2 owner-only T3 → 최종 diff 대표 결재.
+> **자기수정 보호 대상 정본(canonical, §1·§2·§4 전부 이 목록 참조)** — 등급 실측 반영(W1, 2026-07-04):
+> - **게이트-로직 = A2 owner-only T3**(에이전트 편집 deny, 대표 `!`만): `~/.ai-bootstrap/decision-policy.json` · `c6-policy.json` · `risk-classify.js` · `policy-classify.js` · `~/.ai-bootstrap/hooks/*`(+ 배포본 `~/.claude/hooks/*`).
+> - **인프라-config = T2(maia-policy, ask)**: `~/.ai-bootstrap/maia-manifest.json` — 게이트 로직을 직접 못 바꾸고(동기 분류만), 드리프트는 maia-health md5로 탐지 → T3 아님. (기존 목록이 T3로 뭉뚱그린 것 교정.)
+> - **⚠️ A2 잔여 구멍(이연)**: `~/.claude/settings.json` 훅 등록부 = 현재 **T1(ungated)** → 에이전트가 PreToolUse 훅 등록을 지워 게이트를 무력화할 수 있는 벡터. env-class(프로젝트별 수동)라 blanket 게이트 곤란, **훅 섹션 한정 content-gate 필요 = 별도 하드닝 과제**(로드맵 A2 "settings 이연"과 동일). [[2026-07-04-va-c7-reconciliation-analysis]] W1 참조.
 
 ## 0. 문제 (실측 근거)
 - **T2 24건**. 대표가 만나는 대부분은 **highRiskPaths 파일 편집**(auth·scheduler·relay·i18n·lockfile·pkgjson·migrations·generated…). git 추적 편집은 되돌릴 수 있는데도 사전 모달 → 실질 99.9% Yes = 형식적 마찰.

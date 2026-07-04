@@ -52,3 +52,26 @@
 - 골든 단위테스트 신규(`risk-classify.test.js`): ① enabled:false → 다운그레이드 0(no-op 회귀). ② enabled:true+reversible+Edit+auth → T1. ③ secret-code/hook → reversibleClass 없어 T2/T3 유지. ④ Bash tool → 다운그레이드 안 됨. ⑤ denylist/escalator/diff상향이 reversibleClass 위로 이김. ⑥ input.reversible 미주입 → 다운그레이드 안 됨.
 - `node --test risk-classify.test.js` + 기존 회귀 전건.
 - 자체 L2(구현 diff 대상, codex∥gemini).
+
+---
+
+## ✅ 준비·검증 실측 (2026-07-03, scratchpad candidate)
+
+A2 제약(risk-classify.js·decision-policy.json = owner-only T3)상 scratchpad byte-identical candidate에 패치 적용 → 실측 검증. canonical 미변경(대표 `!` 적용 대기).
+
+- **골든 37/37 통과** (①~⑥ 6종 요건 + 자기보호 4종 + diff-bump 판별 + ⑦ override-bypass 7종).
+- **회귀 203 pass / 1 fail** = canonical과 **완전 동일**(enabled:false=진짜 no-op 실증). 1 fail=`trusted backslash-cwd`, canonical에서도 동일 실패=데스크탑 이전(OneDrive→D:) 후 stale 테스트 데이터, 본 변경 무관.
+- **자체 L2(codex∥gemini)**: A(가역 다운그레이드) **양 벤더 PASS**(구현 결함 0). 4조건 게이트 엄격·higherMatch 자기보호·fail-safe 정확 확인.
+
+### ★ B) A2 override-bypass 수리 (codex BLOCKER — 기존 결함, ①a와 무관하나 함께 수리)
+- **결함**: 프로젝트 `$cwd/.maia/risk-override.json`의 `pathOverrides`가 `highRiskPaths`를 short-circuit → gate-self-* T3 자기보호가 override(`**`→T0)로 무력화. **실측**: canonical(패치 전)에서 `risk-classify.js`/`decision-policy.json` 편집이 `T0 allow`로 뚫림(candidate 동일 = 본 패치가 만든 게 아님). denylist(secret/env)는 escalator라 override 무관 DENY 유지 → 구멍은 highRiskPaths 기반 T3 한정.
+- **수리**: `nonOverridable:true` 플래그 도입. protected rule(gate-self-policy/classifier/hooks/b-pipeline + maia-policy) 매칭 시 protFloor를 먼저 계산, override가 매칭돼도 `higherMatch(override, protFloor)`로 protected class가 이김. 비-protected highRiskPath(auth 등)는 override 다운그레이드 기능 보존.
+- **실측**: gate-self-* → override `**` T0에도 **T3 유지**, maia-policy → **T2 유지**, auth+override → **T1(기능 보존)**, rm-rf → **DENY 유지**.
+- 정책: `decision-policy.json`의 5개 rule에 `"nonOverridable": true` 추가. 분류기 `if(p)` 블록에 protFloor 로직 추가(위 최종 diff 참조).
+
+### 설계 인지 (IMPORTANT, 차단 아님)
+1. **lockfile/pkgjson→T1** (codex 이견∥gemini 무해): 손편집 의존성/스크립트가 flip 후 auto-allow. `npm install`은 `pkg-install` T2로 여전히 방어. v6 spec 동결·default-off라 현 위험 0. **flip(①b 이후) 전 재검토**.
+2. **①b 훅 하드 계약**(양 벤더 합의): ①b PreToolUse 훅은 caller의 `tool_input.reversible`을 신뢰 말고 **훅이 직접 `git ls-files`로 판별·주입**(오버라이드). 현재 ①a는 CLI가 `--reversible` 미파싱 → no-op이라 안전.
+
+### 적용 후 SSOT 동기
+- WSL canonical 편집(대표 `!` cp) → `node ~/.ai-bootstrap/maia-deploy.js`로 Windows byte-identical 동기 필수(dual hand-cp 금지, MAIA SSOT 규약).
