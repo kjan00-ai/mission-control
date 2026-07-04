@@ -91,8 +91,11 @@ vmap은 여전히 path의 옛 pass를 표시 → 반영점에서 **stale "L2검�
 - 단위테스트 `w3-async-verify.test.js` 신설(10 tests, 전부 pass): contentKey 순서안정·toWslPath/usableWsl·
   rateOk·planDrain(rate/TTL/기검증/shared state)·scanEnvEvidence dedup·drainEnv(레이스안전 재read 보존·TTL드롭·
   rate-defer 유지·기검증 제거)·isEntryFresh(불변→fresh / 재편집→stale / null·malformed→conservative)·reflectionTally.
-- 회귀: l2-loop 19/19·c6-queue 8/8 pass. risk-classify 5실패 = **선재**(flip 커밋 `1b93cbc`가 canonical을
-  enabled:true로 바꿔 테스트 `polOff=loadPolicy()`의 enabled:false 가정 깨짐 — W3.1 무관, 별건 보고).
+- 회귀: l2-loop 19/19·c6-queue 8/8 pass. risk-classify 5실패 = **선재**(flip `1b93cbc` 잔재, W3.1 무관) →
+  **본 세션서 정정(237/237 pass)**: ①a=enabled 드리프트(`polOff`에 enabled:false 강제) / backslash-cwd=데스크탑
+  이전 잔재(cwd `C:\…OneDrive…`→`D:\Projects\…best-consulting-hp`) / ②h·②i·②j=flip이 lockfile·pkgjson·
+  generated 테스트를 T1로 추가했으나 정책은 이들에 reversibleClass 미부여(5 코드경로만) → **대표 판정(B2):
+  테스트를 T2로 정정**(게이트 보수 유지·자율 스코프 미확대, 정책 무변경). 전부 픽스처 수정, 분류기·정책 무변경.
 - 실 `--drain` 라이브: `processed=0 requeued=0 envs=1`(WSL canonical만 evidence 존재, 큐 없음).
 - maia-deploy `--check` byte동기 확인.
 - **자체검토(대표 "확인해봐") 발견·수정**: drainEnv가 큐파일 부재 시 조기 return→**원장 컴팩션 누락 회귀**(WSL
@@ -109,5 +112,5 @@ vmap은 여전히 path의 옛 pass를 표시 → 반영점에서 **stale "L2검�
   올바르게 반영·현재 default-off).
 - `fda80094` **important**(gemini): D2 infra/pkg 미적용 → 내용diff 방식이 range 비의존 → **전 반영타입 균일 적용**.
 - `ca19f887` **important**(gemini, 🚩escalate·codex refute): 경로변환 로컬복제 DRY. codex 반박=Windows shared
-  top-level require 실패 회피 제약 대응·순수 5줄 한정. **대표 판정 대상** — 권고=로컬복제 유지(대안 lazy-require는
-  wslOnly↔shared 경계서 자체 취약·유지부담 미미). 롤백 시 lazy-require 전환 가능.
+  top-level require 실패 회피 제약 대응·순수 5줄 한정. **대표 확정(2026-07-04): 로컬복제 유지**(대안 lazy-require는
+  wslOnly↔shared 경계서 자체 취약·유지부담 미미).
