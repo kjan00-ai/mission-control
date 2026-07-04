@@ -95,6 +95,9 @@ vmap은 여전히 path의 옛 pass를 표시 → 반영점에서 **stale "L2검�
   enabled:true로 바꿔 테스트 `polOff=loadPolicy()`의 enabled:false 가정 깨짐 — W3.1 무관, 별건 보고).
 - 실 `--drain` 라이브: `processed=0 requeued=0 envs=1`(WSL canonical만 evidence 존재, 큐 없음).
 - maia-deploy `--check` byte동기 확인.
+- **자체검토(대표 "확인해봐") 발견·수정**: drainEnv가 큐파일 부재 시 조기 return→**원장 컴팩션 누락 회귀**(WSL
+  canonical은 원장O·큐X라 실발생). 수정=`hadQueue` 추적으로 조기return 제거·큐 없으면 큐재작성만 skip·컴팩션 항상
+  수행·빈 파일 스퍼리어스 생성 방지. 전용 테스트 추가(11 tests 전부 pass). 재배포 byte동기·Windows 11/11.
 
 ## L2 반영 (round 1, codex∥gemini, 6 findings → 5 settled·1 escalate)
 - `534c84d2` **blocker**(codex): contentKey 재산정 mismatch → **내용 diff 방식으로 전면 교체**(위 D2).
