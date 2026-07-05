@@ -1,5 +1,7 @@
 # 검증 깊이 축 (Verification Depth Axis) + 오케스트레이션 복원력 — dev-case 2026-06-16 확장 스펙
 
+> **★ 구현 상태 (2026-07-05, 대표 지시 D-1/D-2)**: (1) 행동규약 = **전역 `~/.claude/CLAUDE.md` §오케스트레이션 복원력에 성문화**(WSL+Windows) — S-6(유실=즉시 실측)·S-1(재시도 규율; l2-loop 엔진 재시도 기구현)·S-5(wakeup 완료조건; 하네스 auto-reinvoke 부분완화)·S-2(경량 절차강도). (2) **S-4 grep 힌트 훅 구현·등록**: `~/.ai-bootstrap/hooks/post-grep-hint.js`(PostToolUse Bash) — grep 빈결과(exit1)+의심 이스케이프(`\:` 등) AND일 때만 additionalContext 힌트 주입, 고신호·저노이즈·fail-open. 단위 4/4+e2e, WSL↔Windows 동기(byte-identical). **S-6 훅은 미구현(feasibility 부정 확정: 유실=loss는 PostToolUse 미발화라 훅 관측 불가 → 규약 S-6로 커버)**. **이연**: S-2 자동 하한 게이트(diff+intent 분류기, C6-3 동반 中期)·S-1 orchestration telemetry·S-3(검증배치). 근거 [[SESSION-HANDOFF-orchestration-resilience-s156-20260705]].
+
 > dev-case [[2026-06-16-case-l2-review-overhead-and-subagent-error]] (S-1~S-4)를 구체 메커니즘으로 확장한 설계. C6의 §2.1(사전 검증 게이트 입도) 미해소 난제에 실측 근거를 주고, MAIA에 **권한·가역성 게이트와 분리된 "검증 깊이" 차원**을 도입한다.
 >
 > - 날짜: 2026-06-16 / 작성: claude / 버전: **v0.2 (L2 반영 — codex BLOCK ∥ gemini REVISE, BLOCKER 3건 전건 반영)** / 리뷰 [[2026-06-16-verification-depth-axis-l2-aggregation]]
