@@ -5,6 +5,7 @@
 - **상위계획**: [[2026-07-02-glm52-poc-plan]] §1.5·§3·§5·§6-5 / 결정문서 [[2026-07-02-glm-remaining-decisions]] D-2(`2b825150`)
 - **하네스 위치**: `~/.glm-poc/calibration/`(격리, repo 밖) — fixtures·answer-key·score.mjs·README
 - **상태**: 구현+자기검증+**동기 L2(codex∥gemini) 반영 완료** — settled 6건 반영. **대표 판정 3건 = ✅ 전부 활성 확정(옵션A, 2026-07-03)** → answer-key v1.1.0·lock v3·재-L2 완료(§7.3). 승격 게이트(§5-2) 개방됨.
+- **★ §6-5 캘리브레이션 실행 완료 (2026-07-05)**: 4벤더(codex∥gemini∥claude∥GLM-5.2) 클린 fixtures 리뷰 → 채점. **전 벤더 개별 PASS + 패널 union PASS**(critical 3/3·전체 10/10·오탐 8.1%). = concordance 상시지표 승격 게이트 충족(승격 자체는 대표 확정 별도). GLM 단독도 PASS(codex/gemini 동급). 공통 미탐 B07(cancelled 앵커 철자=보강 후보). 결과 원장 [[2026-07-05-glm-calibration-execution-results]], raw `~/.glm-poc/calibration/runs/2026-07-05/`.
 
 > ⚠️ 이 스펙은 상위계획 §6-4/5의 "정답셋·분모·채점 스크립트를 **착수 전 고정**"(D-2 `2b825150` 대표 판정)을 이행한다.
 > 캘리브레이션의 목적은 GLM 채점이 아니라 **"우리 L2 패널(Codex∥Gemini∥Claude)이 GLM 오류를 실제로 거르는지"** 를 seeded-bug로 보증하는 것(§1.5 2층 평가 모델).
