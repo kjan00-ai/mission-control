@@ -35,7 +35,7 @@
 |---|---|
 | GLM 활성 생성자 | ❌ 스코프제한·격리 opt-in(수동), 운영 미배선 |
 | Claude 검증자 | ✅ 이미 A1(전제 무관) |
-| concordance 상시지표 | ❌ 대표 승격 미확정(캘리 spec §5-2 게이트) |
+| concordance 상시지표 | ✅ 대표 승격 확정(2026-08-29, [[2026-08-29-concordance-standing-metric-promotion]]) |
 | 3벤더 상시 편익 | ⚠️ GLM 생성 스트림 부재 → 편익 0·비용만↑ |
 
 → 티어 패널을 지금 배선해도 **검증할 GLM 산출물 스트림이 없어 死배선**. codex 상시추가는 비용만 증가.
@@ -44,7 +44,7 @@
 
 **아래 3건 충족 시 §2 매핑을 배선**한다(단독 선행 금지):
 1. **GLM 운영배선**: §0.5 운영거버넌스 게이트(R1 실PII/금융 GLM유입차단·R2 접근제어·R3 잔존) 통과 → GLM이 실제 생성 스트림 발생.
-2. **concordance 상시지표 승격**: 대표 확정(캘리 spec §5-2 — fpRate/floors PASS 기준 union 통과).
+2. **concordance 상시지표 승격**: ✅ 대표 확정(2026-08-29, [[2026-08-29-concordance-standing-metric-promotion]]). 캘리 spec §5-2 게이트 두 선결 충족.
 3. **게이트/전파**: `decision-policy.json` = `gate-self-policy` **T3 nonOverridable**(대표 `!`만 편집). shared 인프라 = WSL canonical 편집 → `maia-deploy`(전파는 Go 후 + §0.5 후).
 
 ## 5. 지금 상태 = no-op

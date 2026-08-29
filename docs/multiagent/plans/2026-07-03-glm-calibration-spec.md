@@ -59,6 +59,7 @@
 1. **리뷰어 격리(L2 `650d9b7e`·`3d58ce17` 반영)**: fixture 파일은 **정답 주석(seeded 위치·ID)을 포함하지 않는 클린 코드**(정답은 `answer-key.json`에만 존재 — 초기본의 `// seeded:` 노출 결함 제거). 벤더에겐 **`fixtures/`만** 별도 임시 디렉토리로 복사해 제공, `answer-key.json`·`score.mjs`·`lock.json`은 리뷰 컨텍스트 포함 금지. 채점은 리뷰 종료 후 별도 수행.
 2. (§6-5) 캘리브레이션: 각 L2 벤더(Codex∥Gemini∥Claude)에게 fixture 리뷰시켜 findings.json 수집 → `score.mjs --union`로 채점.
    - ⚠️ **concordance 상시지표 승격 게이트(L2 `a2e35fab`·`c02f6e29` 반영)**: 승격은 **§7 대표 판정 3건이 종결된 뒤에만**. 잠정(default-off) 기준으로 승격 금지 — 대표가 `fpRateMax`/`categoryFloors`를 확정(활성 or D-2 유지 명시)한 PASS 기준으로 union 통과해야 승격.
+   - ✅ **승격 확정 = 대표 확정 (2026-08-29)**: 두 선결(대표 판정 3건 종결 2026-07-03 + §6-5 캘리 union PASS 2026-07-05: critical 3/3·10/10·logic 4/4·오탐 8.1%) 모두 충족 → **L2-verified concordance 상시 운영지표 승격**. 결정문 [[2026-08-29-concordance-standing-metric-promotion]]. ⚠️ 실제 수치 산정은 GLM 생성스트림 발생 시점부터(현 스트림 0). 후속 §6-3 티어패널 배선 선결 #2 해소.
 3. **패널 미통과 시 보정(L2 `9c2e9739` 반영 — "Claude 비중↑" 모호성 해소)**: 재측정 루프는 아래를 순서대로, **최대 2회**까지:
    - (a) 미탐이 특정 벤더 편중 → 해당 카테고리에 **강한 벤더 가중**(예 보안 미탐 시 Claude/Codex 우선) 또는 패널에 벤더 추가.
    - (b) 미탐이 앵커 표현 문제로 판명(수동판별) → answer-key 앵커 보강(= version bump + 재-L2).
