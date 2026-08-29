@@ -16,12 +16,13 @@ GLM은 `glm-launch.sh` 수동실행 PoC뿐 → **생성스트림 0** → concord
 
 ## 3. 설계 결정 = Lane A (거버넌스 우선)
 - Lane B 배제 — A2 전체가 거버넌스 목적. GLM 트래픽 전량이 §0.5 게이트(도메인·파일)+A2 egress 콘텐츠검사 경유해야 함.
-- **신호 = `agents.config` JSON `{"backend":"glm"}`**(마이그레이션 불요, 다른 dispatcher `dispatchModel` 관용과 정합). **agent-per**(task-per 아님) — 대표가 agent 단위 통제.
+- **신호 = agent 이름 prefix `glm`**(예 `glm-worker`). **agent-per**(task-per 아님) — 대표가 agent 단위 통제.
+  - ★ 원안(config.backend='glm')은 **서버 syncProjectAgents가 md frontmatter 기준으로 config를 주기적으로 덮어써 임의키(backend)를 지움**(실측). sync 생존 필드는 model/tools/description뿐. 이름은 sync 무관하게 안정 + relay가 이미 이름(`who`)으로 라우팅 → 이름 prefix가 durable·자연스러운 신호. (config.model=glm*·backend='glm'도 override로 인정.)
 - **default-off**: config.backend=glm agent 없으면 CLAUDE 그대로=거동 무변화. 활성=대표가 특정 agent config 설정 + task를 allowlist 레포에 배정.
 
 ## 4. 구현 계약 (relay, untracked 로컬)
 1. **SELECT**(:234): `a.config AS agent_config` 추가.
-2. **신호 파싱**(:242 근처, claude-branch에서만): `let useGlm=false; try{ useGlm = JSON.parse(r.agent_config||'{}').backend==='glm' }catch{}`. codex/gemini/default lane 무관.
+2. **신호 파싱**(:249, claude-branch에서만): `useGlm = who.startsWith('glm') || /^glm/i.test(cfg.model||'') || cfg.backend==='glm'`(이름 prefix가 주 신호=sync 생존). codex/gemini/default lane 무관. GLM agent md는 `model: sonnet`(claude-code는 `glm-5.2[1m]` 원문 미인식 → glm-launch가 sonnet→glm-5.2[1m] remap).
 3. **`runClaudeAgent(task,cwd,assignee,useGlm)`**: spawn 바이너리 `useGlm ? GLM_LAUNCH : CLAUDE`. `GLM_LAUNCH="$HOME/.ai-bootstrap/glm-launch.sh"`. 인자·env·cwd 동일 — glm-launch가 `"$@"` 그대로 claude 전달(headless `-p` 통과 실증됨). useGlm 시 logPath에 `[backend=GLM via glm-launch]` 1줄.
 4. **gate-deny exit-code 매핑(L2 `57014950`)**: 현 구조는 `execFileSync("timeout",["--kill-after=10","300", BIN, ...])` → catch에서 `code=e.status||1`. `timeout`은 **명령 exit code를 그대로 전파**(124=자체 timeout만 remap). glm-launch 게이트 거부=exit 3 → `timeout` 3 전파 → `e.status===3`. 따라서 `runClaudeAgent` catch에서 **`useGlm && code===3` → outcome `glm_gate_denied`**(기존 rate_limit/auth/error 분기보다 먼저). 별도 terminal 로직 불요 — `finishTask` 실패경로가 `retry_count++`, `MAX_RETRY=2`(:98)로 2회 후 max_retry 종료(무한재시도 없음). 게이트는 z.ai 호출 **전** exit3라 재시도 비용≈0. `glm_gate_denied`는 라벨만 구분(로그·telegram 명확화).
 5. **경합/멱등(L2 `ab606507`)**: 신규 동시성 표면 없음 — GLM 경로도 claude-branch의 기존 **`claimTask`(원자 claim, status→in_progress, `changes===1`만 진행, :262)** 통과. 1m cron 재실행·중복은 기존 claim이 이미 차단(B2 상속). timeout=code 124(기존 처리) 유지.
@@ -52,6 +53,12 @@ GLM은 `glm-launch.sh` 수동실행 PoC뿐 → **생성스트림 0** → concord
 - relay 구문(`node --check`)·단위(신호 파싱·바이너리 분기·exit3 처리).
 - E2E 3케이스: ① config.backend=glm agent + allowlist 레포 task → glm-launch 경유(로그 `[backend=GLM]`·프록시 기동) ② 비-allowlist 레포 → `glm_gate_denied` terminal ③ default agent → CLAUDE 무변화. (z.ai 실호출은 fake-claude 스텁으로 통제.)
 - default-off: 마킹 agent 없으면 거동 무변화.
+
+## Path A 활성 실측 (2026-08-29 — SF 정식 배선)
+- 배선: repo-map `knownLocal["kjan00-ai/StarFollow"]=allowlist경로`+pullSkip / SF project#3 github_repo 설정 / `SF/.claude/agents/glm-worker.md`(name glm-*, model sonnet) + register-mc-agents 등록.
+- **파이프라인 end-to-end 실증**: relay가 task를 `cwd=/mnt/d/…/StarFollow`(allowlist)에서 glm-worker로 라우팅 → **glm-launch 발동**(로그 `[backend=GLM(glm-5.2[1m]) via egress 프록시 127.0.0.1:… → api.z.ai]`) → §0.5 게이트 통과 → A2 프록시 → **z.ai 실제 도달**. 라우팅·게이트·프록시·egress 전 계층 정상.
+- **유일 블로커 = z.ai 계정 잔액**: z.ai 429 `[1113] Insufficient balance or no resource package. Please recharge.` → **대표 과금(z.ai/GLM Coding Plan 충전)** 필요. 충전 후 동일 task가 실산출.
+- 검증 발견(반영됨): ① 신호=이름 prefix(config.backend는 sync가 삭제) ② model=sonnet(remap). `unrecognized_model glm-5.2[1m]` 경고는 무해(z.ai가 모델 수용, 429는 잔액).
 
 ## 8. 활성화 (대표, 메커니즘 배선 후)
 대표가 (a) GLM 담당 agent에 `config.backend=glm` 설정(mc CLI/DB), (b) 그 agent의 린/CRUD task를 allowlist 레포(SF)에 배정 → GLM 스트림 발생 → concordance 실측 개시·B1(codex flip) 편익 실현. 비용/범위=대표 활성 판단.

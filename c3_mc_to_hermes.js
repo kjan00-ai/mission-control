@@ -141,7 +141,7 @@ function releaseLock() { try { fs.unlinkSync(LOCK); } catch (e) {} }
 function runClaudeAgent(task, cwd, assignee, useGlm) {
   const logPath = LOGDIR + "/" + task.id + "-" + assignee + "-" + tstamp() + ".log";
   // B2: GLM 백엔드 라우팅 — glm-launch.sh가 §0.5 게이트 + A2 egress 프록시를 경유(claude에 실키 대신 세션토큰).
-  //   default-off: agent.config.backend==='glm' 일 때만 useGlm=true. 인자는 glm-launch가 "$@" 그대로 claude 전달.
+  //   default-off: agent 이름이 'glm'으로 시작할 때만 useGlm=true. 인자는 glm-launch가 "$@" 그대로 claude 전달.
   const BIN = useGlm ? (HOME + "/.ai-bootstrap/glm-launch.sh") : CLAUDE;
   if (useGlm) fs.appendFileSync(logPath, "[backend=GLM via glm-launch]\n");
   // git pull (KNOWN_LOCAL/pullSkip 제외, c3-repos 사본만)
@@ -245,8 +245,12 @@ if (rows.length === 0) { console.log("미처리 task 없음"); process.exit(0); 
 for (const r of rows) {
   const title = String(r.title || "untitled").slice(0, 500);
   const who = (r.agent_name || r.assigned_to || "default").toLowerCase();
-  // B2: agent.config.backend==='glm' → GLM 백엔드로 실행(claude-branch에서만 유효). default-off(미설정=Claude).
-  let useGlm = false; try { useGlm = JSON.parse(r.agent_config || "{}").backend === "glm"; } catch (e) {}
+  // B2: agent 이름이 'glm'으로 시작하면 GLM 백엔드로 실행(claude-branch에서만). default-off(그 외=Claude).
+  //   ★ 신호=agent 이름 prefix. sync 생존(이름은 안정)·model과 독립. GLM agent의 md는 model: sonnet를 쓰고
+  //     glm-launch가 ANTHROPIC_DEFAULT_SONNET_MODEL=glm-5.2[1m]로 remap한다(claude-code는 glm-5.2[1m] 원문 미인식).
+  //     config.model=glm* / backend='glm'도 명시 override로 인정.
+  let useGlm = false;
+  try { const _c = JSON.parse(r.agent_config || "{}"); useGlm = who.startsWith("glm") || /^glm/i.test(_c.model || "") || _c.backend === "glm"; } catch (e) { useGlm = who.startsWith("glm"); }
   try {
     // C4: claude-agent 분기 (기존 CLI/Hermes보다 먼저, claim은 여기서만 → 회귀 0)
     const guard = claudeAgentCwd(who, r.github_repo);
