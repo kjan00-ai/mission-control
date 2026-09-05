@@ -112,7 +112,8 @@
     "collapseSidebar": "사이드바 접기",
     "expandSidebar": "사이드바 펼치기",
     "more": "더 보기",
-    "logout": "로그아웃"
+    "logout": "로그아웃",
+    "decisions": "결정"
   },
   "settings": {
     "language": "언어",
@@ -841,7 +842,11 @@
     "submit": "제출",
     "loadingTranscript": "기록 로딩 중...",
     "noSessionMessages": "세션 메시지 없음",
-    "dunkIt": "완료"
+    "dunkIt": "완료",
+    "loadingTasks": "작업 불러오는 중...",
+    "spawnLabelPlaceholder": "작업 라벨",
+    "timeoutSeconds": "제한 시간(초)",
+    "taskBoard": "작업 보드"
   },
   "cronManagement": {
     "title": "크론 관리",
@@ -2195,5 +2200,17 @@
     "restarting": "Restarting...",
     "diagnosing": "Diagnosing...",
     "notInstalled": "Not installed"
+  },
+  "decisionProposal": {
+    "title": "결정 승인",
+    "subtitle": "C6 비동기 승인 큐 (E3)",
+    "pendingBadge": "{count}건 대기",
+    "approve": "승인",
+    "veto": "거부",
+    "approved": "승인됨",
+    "vetoed": "거부됨",
+    "noPending": "대기 중인 제안이 없습니다.",
+    "loading": "불러오는 중...",
+    "failedAction": "작업에 실패했습니다."
   }
 }

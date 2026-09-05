@@ -119,8 +119,11 @@ describe('GET /api/openclaw/doctor — single-flight + TTL cache (issue #613)', 
   it('exposes invalidateDoctorCache so POST /--fix can invalidate', async () => {
     runOpenClaw.mockResolvedValue({ stdout: 'all good', stderr: '', code: 0 })
 
+    // invalidateDoctorCache moved to the cache lib module (Next 16 forbids
+    // non-handler route exports); the route imports it from there.
     const route = await import('@/app/api/openclaw/doctor/route')
-    expect(typeof route.invalidateDoctorCache).toBe('function')
+    const { invalidateDoctorCache } = await import('@/lib/openclaw-doctor-cache')
+    expect(typeof invalidateDoctorCache).toBe('function')
 
     await route.GET(fakeRequest())
     expect(runOpenClaw).toHaveBeenCalledTimes(1)
@@ -130,7 +133,7 @@ describe('GET /api/openclaw/doctor — single-flight + TTL cache (issue #613)', 
     expect(runOpenClaw).toHaveBeenCalledTimes(1)
 
     // Invalidate: next GET should re-run.
-    route.invalidateDoctorCache()
+    invalidateDoctorCache()
     await route.GET(fakeRequest())
     expect(runOpenClaw).toHaveBeenCalledTimes(2)
   })

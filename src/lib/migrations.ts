@@ -6,6 +6,10 @@ import type Database from 'better-sqlite3'
 export type Migration = {
   id: string
   up: (db: Database.Database) => void
+  // When false, the runner does NOT wrap up() in a transaction — the migration
+  // manages its own BEGIN/COMMIT. Required for table-recreate migrations that
+  // must toggle `PRAGMA foreign_keys` (a no-op inside a transaction).
+  transactional?: boolean
 }
 
 // Plugin hook: extensions can register additional migrations without modifying this file.
@@ -1442,6 +1446,198 @@ const migrations: Migration[] = [
       }
       db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_source_name ON agents(source, name)`)
     }
+  },
+  {
+    // C4B-0: agents.name 전역 UNIQUE 제거 (둘째 프로젝트 동명 에이전트 허용) +
+    // tasks.agent_id FK (라우팅 주키). 결정: 위키 decisions/2026-06-11-c4b-b1-routing-agent-id.md (대안 B).
+    // transactional:false — 테이블 재생성에 PRAGMA foreign_keys=OFF 필요(트랜잭션 내 no-op).
+    id: '052_c4b0_agents_drop_name_unique_tasks_agent_id',
+    transactional: false,
+    up(db: Database.Database) {
+      const agentsSql = (db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='agents'`).get() as { sql?: string } | undefined)?.sql || ''
+      const nameStillUnique = /\bname\b\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(agentsSql)
+      const tcols = db.prepare(`PRAGMA table_info(tasks)`).all() as Array<{ name: string }>
+      const hasAgentId = tcols.some((c) => c.name === 'agent_id')
+      if (!nameStillUnique && hasAgentId) return // 이미 적용됨(멱등)
+
+      // 안전장치: agents incoming FK가 예상(direct_connections, spawn_history) 2개인지 검증.
+      const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`).all() as Array<{ name: string }>
+      const incoming: string[] = []
+      for (const { name } of tables) {
+        const fks = db.prepare(`PRAGMA foreign_key_list("${name}")`).all() as Array<{ table: string; from: string }>
+        for (const fk of fks) if (fk.table === 'agents') incoming.push(`${name}.${fk.from}`)
+      }
+      if (incoming.length !== 2) {
+        throw new Error(`052: expected exactly 2 incoming FKs to agents, found ${incoming.length}: ${incoming.join(', ')}`)
+      }
+
+      db.pragma('foreign_keys = OFF')
+      try {
+        db.exec('BEGIN')
+        if (nameStillUnique) {
+          // agents 재생성: name UNIQUE 제거, 나머지 18컬럼·기본값·session_key UNIQUE 보존.
+          db.exec(`
+            CREATE TABLE agents_new (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL,
+              role TEXT NOT NULL,
+              session_key TEXT UNIQUE,
+              soul_content TEXT,
+              status TEXT NOT NULL DEFAULT 'offline',
+              last_seen INTEGER,
+              last_activity TEXT,
+              created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+              updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+              config TEXT,
+              workspace_id INTEGER NOT NULL DEFAULT 1,
+              source TEXT DEFAULT 'manual',
+              content_hash TEXT,
+              workspace_path TEXT,
+              hidden INTEGER NOT NULL DEFAULT 0,
+              working_memory TEXT DEFAULT '',
+              runtime_type TEXT DEFAULT NULL,
+              display_name TEXT
+            )
+          `)
+          db.exec(`
+            INSERT INTO agents_new (id, name, role, session_key, soul_content, status, last_seen, last_activity, created_at, updated_at, config, workspace_id, source, content_hash, workspace_path, hidden, working_memory, runtime_type, display_name)
+            SELECT id, name, role, session_key, soul_content, status, last_seen, last_activity, created_at, updated_at, config, workspace_id, source, content_hash, workspace_path, hidden, working_memory, runtime_type, display_name FROM agents
+          `)
+          db.exec(`DROP TABLE agents`)
+          db.exec(`ALTER TABLE agents_new RENAME TO agents`)
+          // 인덱스 복원 (name 단독 UNIQUE는 제외)
+          db.exec(`CREATE INDEX IF NOT EXISTS idx_agents_session_key ON agents(session_key)`)
+          db.exec(`CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status)`)
+          db.exec(`CREATE INDEX IF NOT EXISTS idx_agents_workspace_id ON agents(workspace_id)`)
+          db.exec(`CREATE INDEX IF NOT EXISTS idx_agents_source ON agents(source)`)
+          db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_source_name ON agents(source, name)`)
+        }
+
+        if (!hasAgentId) {
+          db.exec(`ALTER TABLE tasks ADD COLUMN agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL`)
+        }
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_agent_id ON tasks(agent_id)`)
+
+        // 백필: project source 우선(COUNT=1 + workspace 일치), 실패 시 (workspace_id,name) 단일매칭.
+        db.exec(`
+          UPDATE tasks SET agent_id = (
+            SELECT a.id FROM agents a
+            JOIN projects p ON p.id = tasks.project_id AND p.workspace_id = tasks.workspace_id
+            WHERE a.source = 'claude-project:' || p.github_repo AND a.name = tasks.assigned_to
+          )
+          WHERE agent_id IS NULL AND assigned_to IS NOT NULL AND project_id IS NOT NULL
+            AND (
+              SELECT COUNT(*) FROM agents a
+              JOIN projects p ON p.id = tasks.project_id AND p.workspace_id = tasks.workspace_id
+              WHERE a.source = 'claude-project:' || p.github_repo AND a.name = tasks.assigned_to
+            ) = 1
+        `)
+        db.exec(`
+          UPDATE tasks SET agent_id = (
+            SELECT a.id FROM agents a WHERE a.name = tasks.assigned_to AND a.workspace_id = tasks.workspace_id
+          )
+          WHERE agent_id IS NULL AND assigned_to IS NOT NULL
+            AND (
+              SELECT COUNT(*) FROM agents a WHERE a.name = tasks.assigned_to AND a.workspace_id = tasks.workspace_id
+            ) = 1
+        `)
+
+        const fk = db.prepare(`PRAGMA foreign_key_check`).all()
+        if (fk.length) {
+          db.exec('ROLLBACK')
+          throw new Error(`052: foreign_key_check failed: ${JSON.stringify(fk)}`)
+        }
+        db.exec('COMMIT')
+      } catch (e) {
+        try { db.exec('ROLLBACK') } catch { /* already rolled back */ }
+        throw e
+      } finally {
+        db.pragma('foreign_keys = ON')
+      }
+
+      const unmatched = db.prepare(`SELECT COUNT(*) AS c FROM tasks WHERE assigned_to IS NOT NULL AND agent_id IS NULL`).get() as { c: number }
+      if (unmatched.c > 0) {
+        console.log(`[migration 052] backfill: ${unmatched.c} task(s) left with agent_id NULL (legacy/unmatched; dispatch falls back to name).`)
+      }
+    }
+  },
+  {
+    // C4B-1: projects.local_path — repo-less 프로젝트(github_repo 미연결) fallback.
+    // syncProjectAgents가 github_repo 없는 프로젝트는 local_path/.claude/agents 를
+    // source=claude-project-id:{id} 로 스캔할 수 있게 한다. (가역: 컬럼 추가.)
+    id: '053_projects_local_path',
+    up(db: Database.Database) {
+      const cols = db.prepare(`PRAGMA table_info(projects)`).all() as Array<{ name: string }>
+      if (!cols.some((c) => c.name === 'local_path')) {
+        db.exec(`ALTER TABLE projects ADD COLUMN local_path TEXT`)
+      }
+    }
+  },
+  {
+    // C5-2: L2 durable bus — MAIA 교차검증(Codex ∥ Gemini) 결과를 위키 md 단독에서
+    // 구조화 테이블로 승격해 쿼리·감사·재현·합의신호를 가능케 한다. 쓰기는 WSL writer
+    // (~/.ai-bootstrap/l2-db-writer.js)가 직접 INSERT(서버 비의존, fail-soft). 본 migration이
+    // 스키마 SSOT — writer는 PRAGMA table_info로 드리프트를 fail-soft 감지한다.
+    // (가역: 신규 테이블 2개 + 인덱스, 기존 데이터 무변경.)
+    id: '054_l2_durable_bus',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS l2_reviews (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          run_key TEXT,
+          artifact TEXT NOT NULL,
+          artifact_ref TEXT,
+          project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+          task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+          trigger TEXT NOT NULL DEFAULT 'manual',
+          final_verdict TEXT,
+          status TEXT NOT NULL DEFAULT 'settled',
+          rounds_count INTEGER NOT NULL DEFAULT 1,
+          blocker_count INTEGER NOT NULL DEFAULT 0,
+          important_count INTEGER NOT NULL DEFAULT 0,
+          escalation_count INTEGER NOT NULL DEFAULT 0,
+          consensus_blocker_count INTEGER NOT NULL DEFAULT 0,
+          content_hash TEXT,
+          agg_ref TEXT,
+          reviewers TEXT,
+          metadata TEXT,
+          workspace_id INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          completed_at INTEGER
+        )
+      `)
+      // run_key = aggregation file name (embeds a unique YYYYMMDD-HHMMSS stamp per run) → idempotent
+      // re-insert (writer uses ON CONFLICT DO NOTHING). UNIQUE on a nullable col allows multiple NULLs
+      // (SQLite), so legacy/keyless rows never collide. (L2 finding be274c5c — 중복 승격 방지.)
+      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_l2_reviews_run_key ON l2_reviews(run_key)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_l2_reviews_artifact ON l2_reviews(artifact)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_l2_reviews_content_hash ON l2_reviews(content_hash)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_l2_reviews_status ON l2_reviews(status)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_l2_reviews_created_at ON l2_reviews(created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_l2_reviews_project_id ON l2_reviews(project_id)`)
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS l2_rounds (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          review_id INTEGER NOT NULL REFERENCES l2_reviews(id) ON DELETE CASCADE,
+          round INTEGER NOT NULL,
+          kind TEXT NOT NULL DEFAULT 'initial',
+          reviewers TEXT,
+          overall_verdict TEXT,
+          canonical_items TEXT,
+          settled_count INTEGER NOT NULL DEFAULT 0,
+          deepen_count INTEGER NOT NULL DEFAULT 0,
+          escalate_count INTEGER NOT NULL DEFAULT 0,
+          parser_fails TEXT,
+          raw_refs TEXT,
+          agg_ref TEXT,
+          workspace_id INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_l2_rounds_review_id ON l2_rounds(review_id)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_l2_rounds_round ON l2_rounds(round)`)
+    }
   }
 ]
 
@@ -1459,9 +1655,16 @@ export function runMigrations(db: Database.Database) {
 
   for (const migration of [...migrations, ...extraMigrations]) {
     if (applied.has(migration.id)) continue
-    db.transaction(() => {
+    if (migration.transactional === false) {
+      // Migration manages its own transaction (e.g. table-recreate needing
+      // PRAGMA foreign_keys=OFF). Only record success after up() returns.
       migration.up(db)
       db.prepare('INSERT OR IGNORE INTO schema_migrations (id) VALUES (?)').run(migration.id)
-    })()
+    } else {
+      db.transaction(() => {
+        migration.up(db)
+        db.prepare('INSERT OR IGNORE INTO schema_migrations (id) VALUES (?)').run(migration.id)
+      })()
+    }
   }
 }

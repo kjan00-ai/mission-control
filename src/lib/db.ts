@@ -603,6 +603,35 @@ if (typeof window === 'undefined' && !isBuildPhase) {
   }
 }
 
+/**
+ * C4B-0: Resolve the canonical agents.id for a task assignee name (routing key).
+ * Source-scoped match (the project's `claude-project:{github_repo}`) takes priority,
+ * then a plain (workspace_id, name) match — each only when unambiguous (exactly one row).
+ * Returns null when there is no match or the name is ambiguous across projects, in which
+ * case routing falls back to name-based resolution. Keep this in lockstep with the
+ * backfill in migration 052 (same matching rules).
+ */
+export function resolveAgentId(
+  name: string | null | undefined,
+  projectId: number | null | undefined,
+  workspaceId: number,
+): number | null {
+  if (!name) return null;
+  const database = getDatabase();
+  if (projectId != null) {
+    const scoped = database.prepare(`
+      SELECT a.id FROM agents a
+      JOIN projects p ON p.id = ? AND p.workspace_id = ?
+      WHERE a.source = 'claude-project:' || p.github_repo AND a.name = ?
+    `).all(projectId, workspaceId, name) as Array<{ id: number }>;
+    if (scoped.length === 1) return scoped[0].id;
+  }
+  const byName = database.prepare(
+    `SELECT id FROM agents WHERE name = ? AND workspace_id = ?`
+  ).all(name, workspaceId) as Array<{ id: number }>;
+  return byName.length === 1 ? byName[0].id : null;
+}
+
 // Cleanup on process exit
 process.on('exit', closeDatabase);
 process.on('SIGINT', closeDatabase);

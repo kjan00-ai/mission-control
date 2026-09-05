@@ -108,6 +108,10 @@ export const config = {
     process.env.OPENCLAW_SOUL_TEMPLATES_DIR ||
     (openclawStateDir ? path.join(openclawStateDir, 'templates', 'souls') : ''),
   homeDir: os.homedir(),
+  // MAIA shared-infra home (decision-gate policy + C6 queue state). The c6 approval
+  // queue SSOT lives at <aiBootstrapHome>/state/c6-queue.json (read by /api/decision-proposals).
+  aiBootstrapHome:
+    process.env.MAIA_AUTOL2_BOOT || process.env.MAIA_BOOT || path.join(os.homedir(), '.ai-bootstrap'),
   // Optional coordinator agent for auto-routing unassigned tasks (issue #663).
   // Opt-in: empty string means the feature is OFF (tasks created without an
   // assignee stay unassigned). When set, new tasks with no assigned_to are

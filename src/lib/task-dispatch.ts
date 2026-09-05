@@ -930,7 +930,11 @@ export async function runAegisReviews(): Promise<{ ok: boolean; message: string 
            t.project_id, p.ticket_prefix, t.project_ticket_no, a.config as agent_config
     FROM tasks t
     LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id
-    LEFT JOIN agents a ON a.name = t.assigned_to AND a.workspace_id = t.workspace_id
+    -- C4B-0: route by agent_id (routing key); legacy rows (agent_id NULL) fall back to
+    -- a name match only when unambiguous (single agent of that name in the workspace).
+    LEFT JOIN agents a ON (t.agent_id IS NOT NULL AND a.id = t.agent_id)
+      OR (t.agent_id IS NULL AND a.name = t.assigned_to AND a.workspace_id = t.workspace_id
+          AND (SELECT COUNT(*) FROM agents a2 WHERE a2.name = t.assigned_to AND a2.workspace_id = t.workspace_id) = 1)
     WHERE t.status = 'review'
     ORDER BY t.updated_at ASC
     LIMIT 3
@@ -1108,7 +1112,10 @@ export async function requeueStaleTasks(): Promise<{ ok: boolean; message: strin
     SELECT t.id, t.title, t.assigned_to, t.dispatch_attempts, t.workspace_id,
            a.status as agent_status, a.last_seen as agent_last_seen
     FROM tasks t
-    LEFT JOIN agents a ON a.name = t.assigned_to AND a.workspace_id = t.workspace_id
+    -- C4B-0: route by agent_id; legacy NULL falls back to an unambiguous name match.
+    LEFT JOIN agents a ON (t.agent_id IS NOT NULL AND a.id = t.agent_id)
+      OR (t.agent_id IS NULL AND a.name = t.assigned_to AND a.workspace_id = t.workspace_id
+          AND (SELECT COUNT(*) FROM agents a2 WHERE a2.name = t.assigned_to AND a2.workspace_id = t.workspace_id) = 1)
     WHERE t.status = 'in_progress'
       AND t.updated_at < ?
   `).all(staleThreshold) as Array<{
@@ -1191,7 +1198,11 @@ export async function dispatchAssignedTasks(): Promise<{ ok: boolean; message: s
     SELECT t.*, a.name as agent_name, a.id as agent_id, a.config as agent_config,
            p.ticket_prefix, t.project_ticket_no
     FROM tasks t
-    JOIN agents a ON a.name = t.assigned_to AND a.workspace_id = t.workspace_id
+    -- C4B-0: route by agent_id (prevents duplicate dispatch on same-name agents);
+    -- legacy NULL falls back to an unambiguous name match.
+    JOIN agents a ON (t.agent_id IS NOT NULL AND a.id = t.agent_id)
+      OR (t.agent_id IS NULL AND a.name = t.assigned_to AND a.workspace_id = t.workspace_id
+          AND (SELECT COUNT(*) FROM agents a2 WHERE a2.name = t.assigned_to AND a2.workspace_id = t.workspace_id) = 1)
     LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id
     WHERE t.status = 'assigned'
       AND t.assigned_to IS NOT NULL
@@ -1654,8 +1665,8 @@ export async function autoRouteInboxTasks(): Promise<{ ok: boolean; message: str
         return c < 3
       })
       if (!alt) continue // all agents at capacity
-      db.prepare('UPDATE tasks SET status = ?, assigned_to = ?, updated_at = ? WHERE id = ?')
-        .run('assigned', alt.agent.name, now, task.id)
+      db.prepare('UPDATE tasks SET status = ?, assigned_to = ?, agent_id = ?, updated_at = ? WHERE id = ?')
+        .run('assigned', alt.agent.name, alt.agent.id, now, task.id)
 
       db_helpers.logActivity('task_auto_routed', 'task', task.id, 'scheduler',
         `Auto-assigned "${task.title}" to ${alt.agent.name} (${alt.agent.role}, score: ${alt.score})`,
@@ -1668,8 +1679,8 @@ export async function autoRouteInboxTasks(): Promise<{ ok: boolean; message: str
       continue
     }
 
-    db.prepare('UPDATE tasks SET status = ?, assigned_to = ?, updated_at = ? WHERE id = ?')
-      .run('assigned', best.name, now, task.id)
+    db.prepare('UPDATE tasks SET status = ?, assigned_to = ?, agent_id = ?, updated_at = ? WHERE id = ?')
+      .run('assigned', best.name, best.id, now, task.id)
 
     db_helpers.logActivity('task_auto_routed', 'task', task.id, 'scheduler',
       `Auto-assigned "${task.title}" to ${best.name} (${best.role}, score: ${scored[0].score})`,

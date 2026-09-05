@@ -60,6 +60,7 @@ Groups:
   cron         list/create/update/pause/resume/remove/run
   events       watch
   status       health/overview/dashboard/gateway/models/capabilities
+  l2           list/get (MAIA L2 cross-verification durable bus)
   export       audit/tasks/activities/pipelines
   raw          request fallback
 
@@ -548,6 +549,19 @@ const commands = {
     gateway: () => ({ method: 'GET', route: '/api/status?action=gateway' }),
     models: () => ({ method: 'GET', route: '/api/status?action=models' }),
     capabilities: () => ({ method: 'GET', route: '/api/status?action=capabilities' }),
+  },
+
+  l2: {
+    list: (flags) => {
+      const qs = [];
+      if (flags.artifact) qs.push(`artifact=${encodeURIComponent(String(flags.artifact))}`);
+      if (flags.status) qs.push(`status=${encodeURIComponent(String(flags.status))}`);
+      if (flags.trigger) qs.push(`trigger=${encodeURIComponent(String(flags.trigger))}`);
+      if (flags['project-id']) qs.push(`project_id=${encodeURIComponent(String(flags['project-id']))}`);
+      if (flags.limit) qs.push(`limit=${encodeURIComponent(String(flags.limit))}`);
+      return { method: 'GET', route: `/api/l2-reviews${qs.length ? `?${qs.join('&')}` : ''}` };
+    },
+    get: (flags) => ({ method: 'GET', route: `/api/l2-reviews/${required(flags, 'id')}` }),
   },
 
   export: {

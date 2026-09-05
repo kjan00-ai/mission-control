@@ -47,3 +47,17 @@ docs/_*.png
 # Claude Code context files (root CLAUDE.md is committed for AI agent discovery)
 **/CLAUDE.md
 !/CLAUDE.md
+
+# AI bootstrap
+.ai-scaffold-done
+.ai-scaffold.lock
+
+# E-1/E-2 MAIA scaffold / relay / junk (MAIA fork — local only)
+.claude/
+.gemini/
+AGENTS.md
+GEMINI.md
+push.err
+c3_*
+!c3_mc_to_hermes.js
+

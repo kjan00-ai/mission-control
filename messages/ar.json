@@ -112,7 +112,8 @@
     "collapseSidebar": "طي الشريط الجانبي",
     "expandSidebar": "توسيع الشريط الجانبي",
     "more": "المزيد",
-    "logout": "تسجيل الخروج"
+    "logout": "تسجيل الخروج",
+    "decisions": "Decisions"
   },
   "settings": {
     "language": "اللغة",
@@ -2195,5 +2196,17 @@
     "tabStatus": "الحالة",
     "unhealthy": "غير سليم",
     "unreachable": "لا يمكن الوصول إليه"
+  },
+  "decisionProposal": {
+    "title": "Decision Approvals",
+    "subtitle": "C6 async approval queue (E3)",
+    "pendingBadge": "{count} pending",
+    "approve": "Approve",
+    "veto": "Veto",
+    "approved": "Approved",
+    "vetoed": "Vetoed",
+    "noPending": "No proposals awaiting approval.",
+    "loading": "Loading...",
+    "failedAction": "Action failed."
   }
 }

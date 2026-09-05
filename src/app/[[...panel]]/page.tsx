@@ -36,6 +36,7 @@ import { DebugPanel } from '@/components/panels/debug-panel'
 import { SecurityAuditPanel } from '@/components/panels/security-audit-panel'
 import { NodesPanel } from '@/components/panels/nodes-panel'
 import { ExecApprovalPanel } from '@/components/panels/exec-approval-panel'
+import { DecisionProposalPanel } from '@/components/panels/decision-proposal-panel'
 import { SystemMonitorPanel } from '@/components/panels/system-monitor-panel'
 import { ChatPagePanel } from '@/components/panels/chat-page-panel'
 import { ChatPanel } from '@/components/chat/chat-panel'
@@ -639,6 +640,8 @@ function ContentRouter({ tab }: { tab: string }) {
     case 'exec-approvals':
       if (isLocal) return <LocalModeUnavailable panel={tab} />
       return <ExecApprovalPanel />
+    case 'decision-proposals':
+      return <DecisionProposalPanel />
     case 'chat':
       return <ChatPagePanel />
     default: {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase, Task, db_helpers } from '@/lib/db';
+import { getDatabase, Task, db_helpers, resolveAgentId } from '@/lib/db';
 import { eventBus } from '@/lib/event-bus';
 import { requireRole } from '@/lib/auth';
 import { mutationLimiter } from '@/lib/rate-limit';
@@ -234,6 +234,10 @@ export async function PUT(
     if (assigned_to !== undefined) {
       fieldsToUpdate.push('assigned_to = ?');
       updateParams.push(assigned_to);
+      // C4B-0: keep agent_id (routing key) in sync when the assignee changes.
+      const nextProjectId = project_id !== undefined ? project_id : currentTask.project_id;
+      fieldsToUpdate.push('agent_id = ?');
+      updateParams.push(resolveAgentId(assigned_to, nextProjectId, workspaceId));
     }
     if (due_date !== undefined) {
       fieldsToUpdate.push('due_date = ?');

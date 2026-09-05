@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase, Task, db_helpers } from '@/lib/db';
+import { getDatabase, Task, db_helpers, resolveAgentId } from '@/lib/db';
 import { eventBus } from '@/lib/event-bus';
 import { requireRole } from '@/lib/auth';
 import { mutationLimiter } from '@/lib/rate-limit';
@@ -219,7 +219,9 @@ export async function POST(request: NextRequest) {
 
     // Resolve project_id for the task
     const resolvedProjectId = resolveProjectId(db, workspaceId, project_id)
-    
+    // C4B-0: routing key — resolve the assignee name to a canonical agents.id.
+    const resolvedAgentId = resolveAgentId(finalAssignedTo, resolvedProjectId, workspaceId)
+
     const now = Math.floor(Date.now() / 1000);
     const mentionResolution = resolveMentionRecipients(description || '', db, workspaceId);
     if (mentionResolution.unresolved.length > 0) {
@@ -245,11 +247,11 @@ export async function POST(request: NextRequest) {
 
       const insertStmt = db.prepare(`
         INSERT INTO tasks (
-          title, description, status, priority, project_id, project_ticket_no, assigned_to, created_by,
+          title, description, status, priority, project_id, project_ticket_no, assigned_to, agent_id, created_by,
           created_at, updated_at, due_date, estimated_hours, actual_hours,
           outcome, error_message, resolution, feedback_rating, feedback_notes, retry_count, completed_at,
           tags, metadata, workspace_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
 
       const dbResult = insertStmt.run(
@@ -260,6 +262,7 @@ export async function POST(request: NextRequest) {
         resolvedProjectId,
         row.ticket_counter,
         finalAssignedTo,
+        resolvedAgentId,
         actor,
         now,
         now,
