@@ -22,6 +22,13 @@ const PULL_SKIP = new Set(REPO_MAP.pullSkip || []);
 const HERMES_ROLES = ["default"];  // C4 정합 전: 역할 profile 폐기, default만
 const CLI_ROLES = ["codex", "gemini"];
 
+// 백엔드 레지스트리(MAIA shared). 부재/로드실패 시 항상 null → 전량 기본 claude로 동작(가용성 우선).
+const BOOT_DIR = process.env.MAIA_BOOTSTRAP_DIR || (HOME + "/.ai-bootstrap");
+const pickBackend = (() => {
+  try { return require(BOOT_DIR + "/backend-resolve.js").pickBackend; }
+  catch (e) { return () => null; }
+})();
+
 fs.mkdirSync(LOGDIR, { recursive: true });
 fs.mkdirSync(NEUTRAL, { recursive: true });
 fs.mkdirSync(REPOBASE, { recursive: true });
@@ -138,12 +145,16 @@ function acquireLock() {
 function releaseLock() { try { fs.unlinkSync(LOCK); } catch (e) {} }
 
 // claude --agent headless 실행. 반환 outcome: ok/timeout/rate_limit/auth_expired/bad_output/error
-function runClaudeAgent(task, cwd, assignee, useGlm) {
+function runClaudeAgent(task, cwd, assignee, backend) {
   const logPath = LOGDIR + "/" + task.id + "-" + assignee + "-" + tstamp() + ".log";
-  // B2: GLM 백엔드 라우팅 — glm-launch.sh가 §0.5 게이트 + A2 egress 프록시를 경유(claude에 실키 대신 세션토큰).
-  //   default-off: agent 이름이 'glm'으로 시작할 때만 useGlm=true. 인자는 glm-launch가 "$@" 그대로 claude 전달.
-  const BIN = useGlm ? (HOME + "/.ai-bootstrap/glm-launch.sh") : CLAUDE;
-  if (useGlm) fs.appendFileSync(logPath, "[backend=GLM via glm-launch]\n");
+  // 백엔드 라우팅 — backend-launch.sh가 레지스트리 해석(fail-closed) → §0.5 게이트 + egress 프록시 경유
+  //   (claude에 실키 대신 세션토큰). default-off: pickBackend()가 null이면 기본 claude.
+  //   backend는 backends.json 등재분만 — 미등재/비활성은 null이라 여기 도달하지 않는다.
+  //   인자는 backend-launch → glm-launch가 "$@" 그대로 claude에 전달.
+  const useBackend = !!backend;
+  const BIN = useBackend ? (HOME + "/.ai-bootstrap/backend-launch.sh") : CLAUDE;
+  const PRE = useBackend ? ["--backend", backend, "--"] : [];
+  if (useBackend) fs.appendFileSync(logPath, "[backend=" + backend + " via backend-launch]\n");
   // git pull (KNOWN_LOCAL/pullSkip 제외, c3-repos 사본만)
   if (!PULL_SKIP.has(task.github_repo) && cwd.startsWith(REPOBASE)) {
     try { execFileSync(GIT, ["-C", cwd, "pull", "--ff-only"], { timeout: 60000 }); }
@@ -152,7 +163,7 @@ function runClaudeAgent(task, cwd, assignee, useGlm) {
   let out = "", code = 0;
   try {
     out = execFileSync("timeout", ["--kill-after=10", "300",
-      BIN, "--agent", assignee, "-p", task.title,
+      BIN, ...PRE, "--agent", assignee, "-p", task.title,
       "--permission-mode", "acceptEdits", "--output-format", "json"],
       // C6-4 ②: expose MC task id so the decision gate tags any enqueued T3 proposal with it (relay hold/resume).
       { cwd, encoding: "utf8", maxBuffer: 10 * 1024 * 1024, env: { ...process.env, MC_TASK_ID: String(task.id) } });
@@ -165,7 +176,8 @@ function runClaudeAgent(task, cwd, assignee, useGlm) {
   let parsed = null;
   try { parsed = JSON.parse(out); } catch (e) {}
   if (code === 124) return { ok: false, outcome: "timeout", logPath };
-  if (useGlm && code === 3) return { ok: false, outcome: "glm_gate_denied", logPath }; // §0.5 게이트 거부(비-allowlist/도메인 deny) — glm-launch exit 3
+  if (useBackend && code === 3) return { ok: false, outcome: "glm_gate_denied", logPath }; // §0.5 게이트 거부(비-allowlist/도메인 deny) — 런처 exit 3. outcome 이름은 기존 이력 호환 유지
+  if (useBackend && code === 2) return { ok: false, outcome: "backend_unresolved", logPath }; // 레지스트리 해석 실패(미등재/정책·크레덴셜 부재) — backend-launch exit 2
   if (code !== 0) {
     const rl = (parsed && parsed.api_error_status) || /rate.?limit|overloaded/i.test(out);
     const au = /credential|oauth|invalid api|authentication/i.test(out);
@@ -245,12 +257,16 @@ if (rows.length === 0) { console.log("미처리 task 없음"); process.exit(0); 
 for (const r of rows) {
   const title = String(r.title || "untitled").slice(0, 500);
   const who = (r.agent_name || r.assigned_to || "default").toLowerCase();
-  // B2: agent 이름이 'glm'으로 시작하면 GLM 백엔드로 실행(claude-branch에서만). default-off(그 외=Claude).
-  //   ★ 신호=agent 이름 prefix. sync 생존(이름은 안정)·model과 독립. GLM agent의 md는 model: sonnet를 쓰고
-  //     glm-launch가 ANTHROPIC_DEFAULT_SONNET_MODEL=glm-5.2[1m]로 remap한다(claude-code는 glm-5.2[1m] 원문 미인식).
-  //     config.model=glm* / backend='glm'도 명시 override로 인정.
-  let useGlm = false;
-  try { const _c = JSON.parse(r.agent_config || "{}"); useGlm = who.startsWith("glm") || /^glm/i.test(_c.model || "") || _c.backend === "glm"; } catch (e) { useGlm = who.startsWith("glm"); }
+  // 백엔드 선택(레지스트리 기반). default-off: 미매치=null=기본 Claude.
+  //   ★ 신호 우선순위 = config.backend > modelPrefix > agent 이름 prefix. 이름 prefix는 sync 생존(이름은 안정).
+  //     GLM agent의 md는 model: sonnet를 쓰고 런처가 ANTHROPIC_DEFAULT_SONNET_MODEL로 remap한다
+  //     (claude-code는 glm-5.2[1m] 원문 미인식). 등재분(backends.json)만 선택 가능 — 미등재는 null.
+  //     레지스트리 로드 실패 시에도 null(가용성 우선, 백엔드는 opt-in).
+  let backend = null;
+  try {
+    const _c = JSON.parse(r.agent_config || "{}");
+    backend = pickBackend(who, _c);
+  } catch (e) { backend = pickBackend(who, {}); }
   try {
     // C4: claude-agent 분기 (기존 CLI/Hermes보다 먼저, claim은 여기서만 → 회귀 0)
     const guard = claudeAgentCwd(who, r.github_repo);
@@ -273,7 +289,7 @@ for (const r of rows) {
       }
       if (!claimTask(r.id)) continue;            // 원자적 claim (이미 처리중이면 skip)
       console.log("MC task #" + r.id + " → claude --agent " + who + " (cwd=" + guard.cwd + ") 실행중...");
-      const result = runClaudeAgent({ id: r.id, title: title, github_repo: r.github_repo }, guard.cwd, who, useGlm);
+      const result = runClaudeAgent({ id: r.id, title: title, github_repo: r.github_repo }, guard.cwd, who, backend);
       bumpQuota(result.cost);
       // C6-4 ②: if the gate enqueued a T3 op for this task (queue active), hold it instead of done/failed churn.
       if (pendingProposalForTask(r.id)) {
