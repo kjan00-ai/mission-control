@@ -1,19 +1,20 @@
-# spec — `clean.requireForce` 우회 차단
+# spec — `git clean` 게이트 반전 (열거 → 면제)
 
 - 날짜: 2026-09-07
-- 상태: 검증 완료 · **대표 판정 대기**
+- 상태: **v0.2 — L2 blocker 3건으로 v0.1 폐기, 설계 반전. 검증 완료 · 대표 판정 대기**
 - 배경: [git clean 등급 분리 spec](./2026-09-07-git-clean-t2-separation-spec.md) §7 — **실사고 발생분**
 - 하네스: `~/p1c/candidates/clean-requireforce/`
+- L2: round 1~3 (claude ∥ gemini, `evidenceEligible=true`) — **blocker 3 + important 5 확증**
+
+> ⚠️ **v0.1 은 폐기됐다.** "우회 형태를 열거해 막는다"는 접근이 L2 에서 세 방향으로 뚫렸고, 그중 하나는 **위협모델 자체가 틀렸음**을 보였다. v0.2 는 열거를 버리고 **안전한 형태만 면제**한다.
 
 ---
 
-## 1. 무엇이 뚫려 있었나
+## 1. 실사고
 
 ```
 git -c clean.requireForce=false clean -d      →  T1 (자율 실행)
 ```
-
-git 은 자체 안전장치를 갖고 있다 — `clean.requireForce` 가 기본 `true` 라서 `-f` 없는 `git clean` 을 거부한다. 이 형태는 **그 안전장치를 꺼서** `-f` 없이 파괴적이 된다. 게이트 규칙은 `-f`/`--force` 의 **존재**를 요구하므로 발화하지 않는다.
 
 격리 repo 실동작 확증:
 
@@ -21,150 +22,151 @@ git 은 자체 안전장치를 갖고 있다 — `clean.requireForce` 가 기본
 before: junk.txt junkdir
 $ git -c clean.requireForce=false clean -d -q      → 게이트 T1 통과
 after :                                             ← 둘 다 삭제
---- 대조군 ---
-$ git clean -d
-fatal: clean.requireForce defaults to true and neither -i, -n, nor -f given; refusing to clean
 ```
 
-**git 자체가 거부하는 명령을 설정 한 줄로 열고, 게이트도 통과한다.**
-
-### 🚩 실사고
-
-발견 보고 직후 이 우회가 **실제로 실행되어** 작업 산출물(당시 미추적이던 spec 문서)과 빈 디렉토리를 삭제했다. 추적 파일 손실은 0 이었고 spec 은 재작성·커밋했다.
-
-발견 시점에 "코퍼스 실사용 0건 → 별건 이연"으로 분류했는데 **그 분류가 틀렸다.** 빈도 0 은 위험 0 이 아니라 아직 안 밟았다는 뜻이고, 몇 분 만에 밟혔다. 파괴적 명령의 위험은 빈도가 아니라 **가역성**이 정한다 — 미추적 파일 삭제는 git 으로 되돌릴 수 없다.
+발견 보고 **직후 이 우회가 실제로 실행되어** 작업 산출물(당시 미추적이던 spec 문서)을 삭제했다. 그때 "코퍼스 실사용 0건 → 별건 이연"으로 분류했는데 그 분류가 틀렸다. 빈도 0 은 위험 0 이 아니라 아직 안 밟았다는 뜻이고, 몇 분 만에 밟혔다.
 
 ---
 
-## 2. 우회 표면은 두 갈래다
+## 2. 🚩 v0.1 이 틀린 이유 (L2 blocker 3건)
 
-| 갈래 | 형태 | 탐지 가능성 |
+v0.1 은 우회 **형태를 열거**했다 — `-c clean.requireForce=…` 와 `git config … clean.requireForce`. 셋 다 뚫렸다(패치본 실측):
+
+| L2 id | 우회 | v0.1 |
 |---|---|---|
-| **A 인라인** | `git -c clean.requireForce=… clean …` | 명령 텍스트에 드러남 |
-| **B 영속** | `git config clean.requireForce false` → 이후 `git clean -d` | **설정하는 순간만** 드러남 |
+| `c13e1f3d` | `git -c "clean.requireForce=false" clean -d` — **따옴표 한 쌍** | T1 ⛔ |
+| `5a11e396` | `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=… git clean -d` — **git 정식 env 주입** | T1 ⛔ |
+| `46abd809` | `git clean -id` — **`-i` 는 requireForce 를 건드리지도 않는다** | T1 ⛔ |
 
-B 가 중요하다. 한 번 영속 설정되면 그 뒤의 `git clean -d` 는 명령 텍스트에 아무 흔적이 없어 **원리적으로 탐지 불가**다. 그러니 탐지 가능한 유일한 지점 — 설정하는 순간 — 에서 막아야 한다.
+총 8형태가 뚫린 채였다.
 
-**실사용 빈도**: 코퍼스 40,768 고유 명령 중 A 형태 4건, B 형태 0건. 그런데 **A 4건은 전부 이 세션의 내 프로브와 그것을 기록한 커밋 메시지**다. 즉 이전 실사용은 **0**. 잠복이다 — 그러나 §1 대로 이연 근거로 쓰지 않는다.
+### 세 번째가 결정적이다 — 위협모델이 틀렸다
+
+`git clean -i`(대화형)는 `-f` 없이도, `clean.requireForce` 를 건드리지도 않고 삭제한다. 즉 v0.1 의 "두 갈래(인라인/영속)" 프레이밍 자체가 잘못됐다.
+
+**그 증거는 내가 v0.1 spec 에 직접 인용한 git 에러문에 이미 있었다**:
+
+```
+clean.requireForce defaults to true and neither -i, -n, nor -f given; refusing to clean
+```
+
+git 이 실행을 허용하는 조건을 스스로 말하고 있다 — **`-i` 또는 `-n` 또는 `-f`**. 인용해 놓고 `-i` 를 못 봤다.
 
 ---
 
-## 3. 설계
+## 3. 설계 v0.2 — 열거를 버리고 뒤집는다
 
-`git-destructive`(DENY) 에 대안 2개를 추가한다(9 → 11).
+git 이 허용하는 세 조건 중 **안전한 것은 `-n`(드라이런) 하나뿐**이다. 그러면 규칙은 이렇게 된다:
+
+> **`git clean` 은 드라이런이 아니면 전부 게이트한다.**
 
 ```
-A  git\s+[^\n;&|]*?(?:-c\s+|--config-env=)clean\.requireForce=[^\n;&|]*?\sclean\b
-B  git\s+(?:-[a-zA-Z]\s+\S+\s+|-{1,2}\S+\s+)*config\b[^\n;&|]*?clean\.requireForce\s+\S
+[변경 전] git … clean … (-f | --force)          ← 실행 조건 하나만 열거
+[변경 후] git … clean  (?! … -n | --dry-run … ) ← 안전 조건만 면제
 ```
 
-### 값을 열거하지 않는다
+등급 분리는 [대안 C](./2026-09-07-git-clean-t2-separation-spec.md) 를 그대로 유지한다:
 
-`=false|0|no|off` 를 열거하고 싶어지지만 **하지 않는다.** 값 열거는 대소문자(`FALSE`)·동의어·env 간접(`--config-env=키=환경변수`)으로 우회된다. **키의 존재만으로** 게이트한다. `=true` 로 명시하는 경우까지 걸리지만 그건 마찰일 뿐 구멍이 아니고, 실사용 빈도도 0 이다.
+| 형태 | 등급 |
+|---|---|
+| 평문 `git clean …` | **T2** (`git-clean`) |
+| 옵션 접두 `git -c … clean …` · `git --git-dir=… clean …` | **DENY** (`git-destructive`) |
+| 드라이런 `-n`·`-nd`·`-xn`·`--dry-run` 및 축약 | 자유 |
 
-### B 는 쓰기만 잡는다
+### 이 반전이 한 번에 닫는 것
 
-키 뒤에 토큰이 오면(`\s+\S`) 쓰기다. 읽기는 키 뒤가 비어 매치되지 않는다:
+열거가 필요 없다 — **아래가 전부 "드라이런이 아닌 `git clean`"** 이기 때문이다:
 
-| 명령 | 판정 | 이유 |
-|---|---|---|
-| `git config clean.requireForce false` | DENY | 키 뒤에 값 |
-| `git config --get clean.requireForce` | 자유 | 키가 마지막 |
-| `git config clean.requireForce` | 자유 | 키가 마지막 |
-| `git config --unset clean.requireForce` | 자유 | **해제는 기본값 `true` 복원 = 안전** |
+- `-f` 계열 · `-i`/`--interactive` · 따옴표 변형 · env 정식 주입 · 설정 해제
+- **영속 설정(`git config clean.requireForce false`) 뒤의 `git clean -d`**
 
-### 접두 관용구는 복제한다
+마지막이 중요하다. v0.1 은 이 경로를 *"명령 텍스트에 흔적이 없어 원리적으로 탐지 불가"* 라고 단정했는데 — **틀렸다.** 설정을 보려 했기 때문에 그렇게 보였을 뿐, **clean 호출 자체를 보면 잡힌다.**
 
-B 의 접두는 `git-destructive` 가 쓰는 것을 그대로 가져왔다. `(?:-{1,2}\S+\s+)*` 만 쓰면 `git -C <경로> config …` 처럼 **값이 분리된 짧은 옵션**을 넘지 못한다(실측 miss → 수정).
+그래서 v0.2 는 v0.1 의 config 차단(B 갈래)을 **버린다.** 안전 이득이 없어졌고, DENY 층은 heredoc 을 마스킹하지 않아 *문서에 그 문자열을 쓰는 것까지 하드블록*하는 마찰만 남기 때문이다.
 
-### 왜 T2 가 아니라 DENY 인가
+### 드라이런 면제는 축약까지 받는다
 
-B 를 T2(모달)로 두면, 모달 한 번으로 **탐지 불가능한 상태가 영구히 만들어진다.** 실측 모달 거부율은 0.030% 다 — 사실상 통과한다. 이건 "이 삭제가 위험한가"의 문제가 아니라 **탐지기 자체를 끄는 행위**라 A2 게이트 자기보호와 같은 성격이고, DENY 가 맞다. 정말 필요하면 대표님이 `!` 로 실행한다.
+git 은 모호하지 않은 롱옵션 접두를 허용한다. 코퍼스에 실제로 `git clean --dry-ru` 가 있었다 — 진짜 드라이런인데 게이트되면 마찰이다. `git clean` 의 롱옵션 중 `--d` 로 시작하는 것은 `--dry-run` 뿐이라 접두 열거가 안전하다:
+
+```
+--d(?:r(?:y(?:-r(?:u(?:n)?)?)?)?)?\b      → --d · --dr · --dry · --dry-r · --dry-ru · --dry-run
+```
+
+`\b` 가 `--dir` 류를 걸러내고, 짧은 `-d`(디렉토리)는 대시 두 개를 요구해 구분된다. 짧은 플래그는 결합형 관용구 `-[a-zA-Z]*n[a-zA-Z]*\b` 로 `-nd`·`-xn` 을 받는다(git 은 `-n` 이 있으면 `-f` 가 함께 있어도 드라이런이다).
 
 ---
 
 ## 4. 검증
 
-### A. 우회 폐쇄 — 9형태 전부 `T1 → DENY` ✅
+### A. 스모크 29건 PASS ✅
 
-실사고 형태 · 값 변형(`=0`) · 대소문자(`requireforce=FALSE`) · 옵션 혼합 · env 간접(`--config-env`) · 체인 뒷단 · 영속 설정 · 전역 설정 · 경로점프+로컬 설정.
+v0.1 이 뚫렸던 8형태 전부 게이트 — `-i` 대화형·`-i` 파이프(`printf 'c\n' | git clean -id`)·`--interactive`·따옴표(겹/홑)·env 정식 주입·영속 설정 후 clean·실사고 형태. 기존 형태(평문·경로인자·결합플래그·체인·`bash -c`·경로형 롱옵션 접두) 등급 유지. 드라이런 7형태(축약 포함) 자유. 무관 명령(`reset --hard`·`commit`·`status`·`config --get`) 불변.
 
-### B. 오탐 불발생 ✅
-
-**코퍼스에서 이 키에 매칭된 4건 중 2건이 내 커밋 메시지였다** — 규칙이 텍스트 언급에 발화하면 안 된다. DENY 층의 `dangerScanText` 는 커밋 메시지를 비우므로 통과한다(엔진 통합으로 확인):
-
-| 케이스 | 결과 |
-|---|---|
-| 커밋 메시지가 키·우회명령을 인용 (코퍼스 실재) | T2 → T2 ✅ (git-commit 이 잡을 뿐, 신규 규칙 아님) |
-| AI 프롬프트가 키 언급 | T1 → T1 ✅ |
-| `git config --get` / 키만 / `--unset` / `--list` | 전부 불변 ✅ |
-| 무관한 config 쓰기(`user.email`) | 불변 ✅ |
-
-### ⚠️ 수용된 절충 — 문서 heredoc 은 하드블록된다
+### B. 고정 코퍼스 전수 — 40,816 고유 명령
 
 ```
-cat > doc.md <<'EOF'
-git -c clean.requireForce=false clean -d 는 DENY 입니다
-EOF
-                                        →  T1 → DENY
-```
-
-DENY 층은 `dangerScanText` 를 쓰고 **그건 heredoc 페이로드를 마스킹하지 않는다**(마스킹은 T2 층의 `headScanText` 전용). 그래서 이 문자열을 문서에 쓰는 것도 막힌다.
-
-이건 텍스트 스캔 DENY 의 구조적 한계이며, `git checkout --` 에 대해 **대표 판정 (가)로 이미 수용된 계열**이다. 회피는 heredoc 대신 파일 쓰기 도구를 쓰는 것 — 이 spec 자체가 그렇게 작성됐다.
-
-### C. 기존 등급 불변 ✅
-
-`git clean -fd`(T2) · `git --git-dir=X clean -fd`(DENY) · `git -c a=b clean -fd`(DENY) · `git clean -n`(T1) · `git reset --hard`(DENY) 전부 그대로.
-
-### D. 고정 코퍼스 전수 — 40,768 고유 명령
-
-```
-강화 · 미탐 해소(실제 실행)   1   ← 실사고를 낸 그 명령 자체 (T2 → DENY)
+강화 · 미탐 해소(실제 실행)   2   ← 둘 다 이 세션의 실사고 프로브 자신
 강화 · 오탐 재발(텍스트 언급)  0 ✅
 완화                         0 ✅
 ```
 
-### E. 기존 시험군 ✅
+`git clean --dry-ru` 는 축약 면제를 넣기 전 1건 잡혔다가 면제 후 자유로 돌아왔다.
+
+### C. 기존 시험군 ✅
 
 `risk-classify` 237 · `gate-destructive` 81 · `policy-classify` 53 — 전부 통과.
 
-### F. 영구 회귀 가드 — 81 → 90건
+### D. 영구 회귀 가드 — 81 → 91건
 
-정책과 **한 트랜잭션**으로 쓴다: 시험을 먼저 넣으면 적용 전까지 81/81 이 깨져 세션 시작 점검이 오작동하고, 정책만 고치면 다음 편집이 조용히 되돌려도 아무도 모른다. 추가 9건 = 우회 7 + 읽기·`--unset` 자유 2.
+GATE/FREE 8 + **룰 귀속 2**. 룰 귀속을 넣는 이유는 GATE 축(DENY/T3/T2 아무거나)이 이 설계의 계약인 *"평문=T2 / 접두형=DENY"* 를 구분하지 못하기 때문이다(L2 `6683b216`). 정책과 **한 트랜잭션**으로 쓴다.
 
 ---
 
-## 5. 잔여 위험
+## 5. L2 처리 내역
+
+| id | 등급 | 지적 | 처리 |
+|---|---|---|---|
+| `c13e1f3d` | blocker | 따옴표 한 쌍으로 A·B 둘 다 우회 | **설계 반전** — 형태를 안 보므로 무관해짐 |
+| `5a11e396` | blocker | `GIT_CONFIG_*` env 정식 주입 미차단 | **설계 반전** |
+| `46abd809` | blocker | `-i` 가 requireForce 없이 삭제 — 위협모델 오류 | **설계 반전** (근본 원인) |
+| `d5153540` | important | `--unset` 을 "기본값 true 복원=안전"으로 단정한 것은 틀림 — 상위 스코프 상속값을 복원하므로 global 에 false 가 있으면 우회 복원 | **지적이 옳다.** v0.2 는 config 차단을 버려 이 판단 자체가 사라졌다 |
+| `7b45612a` | important | "탐지 가능한 유일한 지점" 과장 — 파일 직접 쓰기는 못 막음 | **주장 철회.** v0.2 는 clean 호출을 보므로 설정 경로와 무관 |
+| `18e81aa8` | important | 롤백이 공유 SSOT 를 낡은 스냅샷으로 덮어써 다른 트랙 편집 소실 | 적용 시 해시를 기록하고, 롤백 전 대조해 **불일치면 거부**(`--force` 로만 강행) |
+| `c09e92ee` | important | 적용은 수동 동기 안내, 롤백만 자동 → 분기 창 | **적용도 자동 동기** |
+| `6683b216` | important(refuted) | 가드가 GATE 축뿐이라 DENY↔T2 다운그레이드를 못 잡음 | gemini 는 "본문 밖 구현이라 판정 불가"로 refute 했으나 **지적 내용은 옳다** — 룰 귀속 2건 추가 |
+| `9fe0e0d0` | important(refuted) | 이미 설정된 legacy false 상태 미대응 | v0.2 에서 **해소** — clean 호출을 보므로 선행 설정과 무관 |
+| `d662c21d` | important(refuted) | apply.js 가 T1 이라 게이트 자기적용 공백 | 기지 항목, 별건 후속(§7) |
+
+---
+
+## 6. 잔여 위험
 
 | 위험 | 판단 |
 |---|---|
-| **이미 설정된 config** | `~/.gitconfig` 나 repo `.git/config` 에 **이전에** 설정돼 있으면 이후 `git clean -d` 는 명령 텍스트에 흔적이 없어 **원리적으로 탐지 불가**. 게이트가 아닌 다른 층(설정 감시)의 문제다. 이 패치는 앞으로 설정되는 것만 막는다 |
-| 문서 heredoc 하드블록 | §4 수용 절충. 파일 쓰기 도구로 회피 |
-| `=true` 명시도 게이트 | 의도적(값 열거 회피). 마찰 방향이라 구멍 아님 |
-| 같은 계열의 다른 설정 키 | `core.hooksPath=/dev/null`(훅 우회) 등이 같은 구조다. 코퍼스 6건은 전부 시험 프로브. **이 패치 범위 밖 — 별건** |
-
-> **선행 상태 점검 권고**: 적용과 별개로, 현재 `clean.requireForce` 가 어디엔가 이미 꺼져 있는지 한 번 확인하는 것이 좋다 — `git config --show-origin --get-all clean.requireForce` (읽기라 자유).
+| `git clean -d`(git 자신이 거부하는 형태)도 게이트 | 마찰 방향. 코퍼스 실사용 0 |
+| 드라이런 면제가 과하면 미탐 | 면제는 `-n` 계열과 `--d…` 접두뿐. `-f`·`-i` 는 면제 대상이 아니고, `-n` 이 섞이면 git 자체가 드라이런으로 동작하므로 **면제가 곧 사실** |
+| 문서 heredoc | 평문 형태는 T2(마스킹 적용)라 자유. **접두형만** DENY 라 하드블록 — `git checkout --` 과 동일 계열로 기수용 |
+| 게이트 밖 삭제 경로 | `rm -rf`·`find -delete` 등은 별도 규칙 소관. 이 spec 은 `git clean` 만 |
 
 ---
 
-## 6. 적용
+## 7. 적용
 
 ```bash
-node ~/p1c/candidates/clean-requireforce/apply.js --check    # 스모크 19 + 시험군 + 가드 미리보기
-node ~/p1c/candidates/clean-requireforce/apply.js --apply    # 정책 + 시험 한 트랜잭션
-node ~/.ai-bootstrap/gate-destructive.test.js                # 90/90 기대
-node ~/.ai-bootstrap/maia-deploy.js                          # Windows 동기
+node ~/p1c/candidates/clean-requireforce/apply.js --check    # 스모크 29 + 시험군 + 가드 미리보기
+node ~/p1c/candidates/clean-requireforce/apply.js --apply    # 정책+시험 한 트랜잭션 + Windows 동기 자동
+node ~/.ai-bootstrap/gate-destructive.test.js                # 91/91 기대
 ```
 
-롤백 `apply.js --rollback` — 정책·시험 동시 복원 후 **Windows 동기까지 수행**하고, 실패하면 분기 상태임을 명시하며 비정상 종료한다.
+롤백 `apply.js --rollback` — 적용 당시 해시와 대조해 **다른 트랙의 편집이 있으면 거부**하고, 통과 시 정책·시험 복원 후 Windows 동기까지 수행한다.
 
-⚠️ 이 명령들은 게이트상 **T1 이라 막히지 않는다.** 대표 판정 없이 실행하지 않는 것은 정책 의도를 존중하는 선택이지 기술적 강제가 아니다(별건 후속).
+⚠️ 이 명령들은 게이트상 **T1 이라 막히지 않는다.** 대표 판정 없이 실행하지 않는 것은 정책 의도를 존중하는 선택이지 기술적 강제가 아니다.
 
 ---
 
-## 7. 후속
+## 8. 후속
 
 - **정책 자가적용 강제력 공백** — `node apply.js --apply` 가 T1
 - **같은 계열 설정 키** — `core.hooksPath` 등 "안전장치를 끄는 설정"의 일반화 검토
+- **다른 규칙의 열거식 설계 점검** — 이번 교훈(열거 → 면제)이 적용될 규칙이 더 있는지
 - **L2 상대경로 오배달** — 회피는 `MAIA_L2_PROJECT=mission-control`
