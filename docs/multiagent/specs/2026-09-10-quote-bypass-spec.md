@@ -1,8 +1,8 @@
 # spec — 따옴표 우회 차단 (엔진 스캔 텍스트)
 
 - 날짜: 2026-09-10
-- 상태: **v0.1 — 구현·검증 완료 · 대표 판정 대기**
-- 하네스: `~/p1c/candidates/quote-bypass/` (`patch.js` · `apply.js --check|--apply|--rollback` · `measure.js` · `compose-check.js`)
+- 상태: **v0.2 — 라이브 적용 완료**(2026-09-13, 대표 `!`). v0.1 은 2026-09-12 적용분이며 L2 합의 4건이 열려 있었다 → §8
+- 하네스: `~/p1c/candidates/quote-bypass/` (v0.1 `apply.js` · **v0.2 `apply2.js --check|--apply|--rollback`** · `measure.js`·`measure2.js` · `three-way.js` · `compose-check.js`)
 - 발견 경로: [clean 게이트 반전 spec](./2026-09-07-clean-requireforce-bypass-spec.md) 의 L2 4차 blocker `2e1fc2e6` → 실측으로 범위가 전 규칙으로 확대
 
 ---
@@ -98,6 +98,8 @@ function dequoteCmd(s) {
 
 실사용 이력에 **영향이 전혀 없다.** 닫는 것은 아직 밟지 않은 형태뿐이다.
 
+> ⛔ **이 측정은 틀렸다**(2026-09-13 정정). 기준선을 *패치 이전 엔진*이 아니라 다른 것으로 잡아 상승을 못 봤다. `three-way.js` 로 **패치 직전 백업(`risk-classify.js.bak-quote-bypass`)을 실제 기준선으로 놓고** 다시 재면 **v0.1 은 224건을 T1→T2 로 올린다**(하락은 실제로 0). 원인·후속은 §9. 교훈: 완화든 강화든 **기준선은 "패치 직전 그 파일"이어야 한다** — 재현 가능한 백업을 기준선으로 고정하지 않으면 "영향 0" 은 측정이 아니라 희망이다.
+
 ### C. 기존 시험군 ✅
 
 `risk-classify` 237 · `gate-destructive` 81 · `policy-classify` 53 — 전부 통과.
@@ -153,3 +155,77 @@ node ~/.ai-bootstrap/gate-destructive.test.js           # 87/87 기대
 - **간접화 일반**(변수·치환·인코딩) — 텍스트 게이트로는 못 닫는다. 실행 계측(PostToolUse commit SHA 포착)과 사후 롤백 쪽 트랙으로 귀속
 - **alias 은닉** — alias *정의*를 보는 별개 규칙(기지, `clean` spec §8)
 - **다른 규칙군의 같은 사각** — 이번 수정은 전 규칙에 일괄 적용된다. 다만 `test: 'path'` 규칙은 대상이 아니다(경로는 셸 인용 문제가 다름)
+
+---
+
+## 8. v0.2 — L2 합의 4건 반영 (2026-09-13 라이브)
+
+v0.1 을 적용한 뒤 돌린 L2(`evidenceEligible: true`)가 round 2 에서 **4건을 합의(corroborated)** 로 올렸고, **전부 라이브에서 재현됐다.** 즉 v0.1 은 "적용 완료"였지만 구멍이 열린 채였다.
+
+| L2 id | 등급 | 내용 | v0.1 라이브 실측 |
+|---|---|---|---|
+| `f4708c26` | blocker | `$'…'`·`$"…"`(ANSI-C/로케일 인용)도 셸이 똑같이 벗긴다 | `git $'reset' --hard` → **T1(allow)**. DENY 층 관통 |
+| `5c4bfa05` | blocker | `branchAllow`/`trustedAllow` 의 `denyIfRe` veto 가 원문만 본다 | `git commit --"amend"` [feat/*] → **T1(allow)**. 히스토리 재작성이 자율 실행 |
+| `2661b190` | important | 따옴표 제거가 인용 안에서 죽어 있던 메타문자(`;`·`&&`)를 되살려 없던 세그먼트 분할을 만든다 | `echo "a;rm"` → T2 오탐 |
+| `fa4ab4a3` | important | 공백 없는 payload 는 dq 레인에서 마스킹 근거(따옴표)가 사라진다 | 〃 (같은 뿌리) |
+
+`577c3bb3`(Windows 동기가 수용기준 밖) 도 합의였다 → v0.2 는 `apply2.js` 가 **적용 직후 `maia-deploy` 를 직접 호출**하고 실패 시 비정상 종료한다. 미합의 1건 `19b9bdb3`(T3 배포를 T1 스크립트가 한다)은 대표 에스컬레이션으로 남아 있다 — §6 의 기지 항목과 같은 사안.
+
+### 수정 셋
+
+1. **`$` 접두 인용도 벗긴다** — 셸 동작과 일치시킨다.
+2. **인용 내용에 셸 메타문자가 있으면 벗기지 않는다.** 그 따옴표는 토큰을 쪼개는 게 아니라 메타문자를 *무력화*하는 장치다. 벗기면 셸이 하지 않는 분할을 만든다(`2661b190` 의 원인). 같은 수정이 payload 노출(`fa4ab4a3`)도 줄인다.
+3. **veto 를 dq 주체에도 적용한다.** veto 는 안전장치라 **원문·제거본 둘 중 하나만 걸려도 거부**한다. 반대로 `requireRe`(허용 조건)는 원문만 본다 — 완화 방향으로는 넓히지 않는다.
+
+```js
+.replace(/\$?"([^"\s\\;&|<>()`$]*)"|\$?'([^'\s;&|<>()`$]*)'/g, ...)
+```
+
+### 검증 (적용 후 라이브)
+
+```
+스모크 19건            PASS   (ANSI-C 3 · veto 3 · v0.1 유지 5 · 오탐감시 8)
+risk-classify         237/237
+gate-destructive      107/107   ← 104 에서 +3 (ANSI-C 2 + 메타문자 오탐감시 1)
+policy-classify        53/53
+라이브 실증            11/11
+maia-deploy 드리프트     0      (82 shared, 2 synced)
+```
+
+| 명령 | v0.1 | v0.2(라이브) |
+|---|---|---|
+| `git $'reset' --hard` | T1 | **DENY** |
+| `git $'clean' -fd` / `git $"clean" -fd` | T1 | **T2** |
+| `git commit --"amend" -m x` [feat/*] | T1(allow) | **T2** |
+| `git commit --no-ver"ify" -m x` [feat/*] | T1(allow) | **T2** |
+| `echo "a;rm"` · `echo "x&&rm"` | T2(오탐) | **T1** |
+| `git "clean" -fd` · `git "reset" --hard` | T2 · DENY | 유지 |
+
+적용 `node ~/p1c/candidates/quote-bypass/apply2.js --apply` · 롤백 `--rollback`(적용 당시 해시 대조, 다른 편집이 있으면 거부) · 백업 `.bak-quote-v2`.
+
+---
+
+## 9. 후속 — v0.1 이 만든 오탐 193건 (v0.3 트랙)
+
+§4B 정정에서 드러난 건이다. `three-way.js`(기준선 = 패치 직전 백업) 실측:
+
+```
+코퍼스 41,633 고유 명령
+라이브 v0.1 : 상승 224 · 하락 0
+후보  v0.2 : 상승 193 · 하락 0     ← 193건 전부 v0.1 에서도 이미 상승 중
+```
+
+v0.2 는 오탐을 **31건 줄이지만**(메타문자 보존분) 나머지 193건은 남는다. 원인 규칙 집계:
+
+| 규칙 | 건수 | 형태 |
+|---|---|---|
+| `migration` | **126** | `find … -name "migrations"` · `ls docs/…/specs/…` 처럼 **인자 속 단어**가 벗겨져 규칙에 걸린다 |
+| `remote-run` | 30 | `cd "D:/…" && cat > "C:/…"` 등 인용 경로가 벗겨진 뒤 결합 |
+| `git-clean` | 8 | 힙 문서(`python3 - <<'PY'`)가 spec 본문의 `clean` 문자열을 품는다 |
+| 기타 | 29 | `git-commit:branch-gate` 5 · `move-rename` 5 · `pkg-install` 5 · `infra` 4 · `git-push` 3 · `interactive` 3 … |
+
+**진단**: dq 레인이 **명령·하위명령 위치를 가리지 않고** 전체 텍스트를 규칙에 먹인다. 우회가 성립하는 자리는 *실행되는 토큰*(명령/하위명령/플래그)인데, 지금은 *인자 속 단어*까지 같은 대우를 받는다.
+
+**v0.3 설계 방향**(미착수 — L2 선행 필요): dq 텍스트를 **헤드 토큰열이 실제로 달라질 때만** 규칙에 태운다. `find -name "migrations"` 는 헤드가 그대로라 dq 레인을 타지 않고, `git "clean"` 은 하위명령이 바뀌므로 탄다. ⚠️ **완화 방향 패치**라 [[gate-relaxation-needs-retention-check]] 규율 필수 — 고정 코퍼스 전수 + `gate-destructive` 107건이 **전부 유지**됨을 먼저 증명하고, 합성 MUST_GATE 는 쓰지 않는다.
+
+> 이 193건은 **v0.2 가 새로 만든 게 아니라 v0.1 이 만든 것을 이제야 잰 것**이다. v0.2 적용 여부와 무관하게 이미 라이브에 있었다.
