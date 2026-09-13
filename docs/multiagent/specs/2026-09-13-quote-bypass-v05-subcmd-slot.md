@@ -38,9 +38,16 @@ IN  : find . -name "migrations"
 OUT : (불변)                                          ← v0.4 의 expectValue 규율이 이미 지킨다
 ```
 
-⚠️ **중간 출력에서 등급을 추론하면 틀린다.** 위 축약 명령을 실제로 분류하면 v0.4 에서도 `T1/default-cmd` 다 —
-노출만으로 규칙이 걸리는 것이 아니기 때문이다. 등급이 실제로 바뀌는 것은 **코퍼스 원문 6건**이며(`relaxed5.js`),
-그 전수가 `T2→T1` 로 내려간다. 아래 §7 가드는 그 원문을 쓴다.
+⚠️ **위 예시로 등급을 말하면 안 된다 — 중간 출력일 뿐이다.** 실제로 분류하면 저 축약 명령은 v0.4 에서도
+`T1/default-cmd` 다(노출됐다고 규칙이 걸리는 것은 아니다). **등급이 실제로 바뀌는 명령은 코퍼스 원문 6건뿐**이며
+(`relaxed5.js` → `relaxed5.json`), 전수가 `T2→T1` 로 내려간다. 그중 가장 짧은 것:
+
+```
+cat "D:/BestConsulting_OS/wiki/projects/best-consulting-hp/reviews/2026-06-30-claude-md-history-migration-design-…md" 2>/dev/null | head -80
+      v0.4: T2/migration   →   v0.5: T1/default-cmd
+```
+
+§7 가드는 **이 원문**을 쓴다. 축약본을 쓰면 가드가 공허해진다(실측 — v0.4 에서도 127/127 통과했다).
 
 `-name "migrations"`(플래그 값)는 v0.4 가 이미 막았다. **남은 구멍은 첫 인자 자리 하나뿐이다.**
 
