@@ -3,7 +3,7 @@
 - 날짜: 2026-09-13
 - 대상: `~/.ai-bootstrap/risk-classify.js` (게이트 SSOT · T3)
 - 선행: [[2026-09-10-quote-bypass-spec]] v0.1→v0.4 · 핸드오프 carry "오탐 잔여 40건"
-- 상태: **L2 1차 반영 완료 · 대표 `!` 적용 대기**
+- 상태: **라이브 적용·재봉인 완료 (2026-09-14 대표 `!`)**
 
 ---
 
@@ -135,3 +135,33 @@ git $'\143lean' -fd    live: T2/git-clean   A: T2/git-clean   B: T1/default-cmd 
 - 백업: `risk-classify.js.bak-quote-v5` · `gate-destructive.test.js.bak-quote-v5`
 - **적용 후 필수**: `node ~/.ai-bootstrap/gate-ssot-ledger.js --seal --reason "quote-bypass v0.5"` — 안 하면 다음날 health 가 FAIL 을 낸다(의도된 동작)
 - 게이트 SSOT 는 T3 이므로 **대표 `!` 로 실행**한다
+
+## 9. 적용 결과 (2026-09-14 라이브)
+
+대표 `!` 로 `apply5.js --apply` 실행 — 엔진·시험 갱신 + Windows 동기(82 identical, 2 synced, residual 0).
+
+| 검증 | 결과 |
+|---|---|
+| 라이브 시험군 | **417/417** (risk-classify 237 · gate-destructive **127** · policy-classify 53) |
+| 오탐 해소 실증 | 코퍼스 원문 **6/6** 이 `T2 → T1/default-cmd` |
+| 차단력 실증 | 인용 서브커맨드 T2 · ANSI-C 8진 T2 · ANSI-C 16진 **DENY** · push T3 — **4/4 유지** |
+
+실증 하네스 `live-verify5.js` — 손으로 짜맞춘 문자열이 아니라 `relaxed5.json`(코퍼스 원문)과 시험군과 같은 조립 방식을 쓴다.
+
+### 재봉인 — **두 환경 모두** 해야 한다
+
+`risk-classify.js` 는 해시 대장의 보호집합이라 적용 직후 양쪽이 `⛔ 불일치` 였다(대장이 제 역할을 한 것). 봉인하지 않으면 다음날 health 가 FAIL 을 낸다.
+
+```
+node ~/.ai-bootstrap/gate-ssot-ledger.js --seal --reason "quote-bypass v0.5"
+node ~/.ai-bootstrap/gate-ssot-ledger.js --seal --boot /mnt/c/Users/Design/.ai-bootstrap --reason "quote-bypass v0.5"
+```
+
+⚠️ **두 번째 줄을 잊기 쉽다.** 적용기가 Windows 까지 동기하므로 그쪽 대장도 함께 어긋나는데, 대장은 환경별로 따로 있다
+(WSL 16 파일 · Windows 17 파일 — windowsOnly 1건 차이). 실측 결과:
+
+```
+WSL     대장 일치 — 16개 파일   Windows 대장 일치 — 17개 파일
+maia-deploy --check  84 identical, 0 drifted, 0 unclassified
+maia-health          무음
+```
