@@ -74,8 +74,13 @@ fi
 
 - `MAIA_WIKI_ROOT` 우선 — [[desktop-migration-decision]] 이 정한 보정 변수 재사용.
 - **존재하는 후보만** 채택 → 죽은 경로가 조용히 박히는 재발 차단.
-- **L2 `4bcac08d`+`17383593` 반영**: 못 찾으면 ① `<<AI_BOOTSTRAP_WIKI_MISSING tried=...>>` 경고를 stdout 으로
-  (wrapper 가 캡처해 세션 컨텍스트로 올림) ② 마커에 `wiki=skipped` 기록 ③ `exit 0` 유지.
+- **L2 `4bcac08d`+`17383593` 반영**: 못 찾으면 ① `<<AI_BOOTSTRAP_WIKI_MISSING project=.. tried=..>>` 경고를 stdout 으로
+  (wrapper 가 캡처해 세션 컨텍스트로 올림) ② 마커에 `wiki=missing` 기록 ③ `exit 0` 유지.
+  `tried` 에는 실패한 `MAIA_WIKI_ROOT` 값도 포함한다 — env 를 줬는데 실패한 경우를 진단할 수 있어야 한다.
+- **(범위 확장) 위키 서브폴더 보강을 폴더 신규생성 조건에서 분리.** 기존 코드는 `if [ ! -d $WIKI_PROJ ]` 안에서만
+  서브폴더를 만들어, **폴더가 먼저 생긴 프로젝트(ModuCare — C6 증거가 8/30 에 폴더를 선점)에서는 `handoffs/` 등이
+  영영 안 생긴다**(실측: ModuCare 는 `eligibility/evidence/trust` 만 보유). 서브폴더 생성을 폴더 존재와 무관한
+  멱등 보강으로 분리한다. 선결 ③ 의 근본 수정이며, 이후 ModuCare 는 세션 시작만으로 자동 보강된다.
 
 ### R2 — Windows 구본을 **no-op 스텁**으로 (`~/.claude/scripts/init-project.sh`, T1)
 
