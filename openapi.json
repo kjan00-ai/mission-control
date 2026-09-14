@@ -5487,6 +5487,11 @@
                   },
                   "description": {
                     "type": "string"
+                  },
+                  "local_path": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Absolute filesystem path of the project checkout. Repo-less projects use it so the scheduler can scan <local_path>/.claude/agents."
                   }
                 }
               }
@@ -5550,6 +5555,11 @@
                   },
                   "description": {
                     "type": "string"
+                  },
+                  "local_path": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Absolute filesystem path of the project checkout. Repo-less projects use it so the scheduler can scan <local_path>/.claude/agents."
                   }
                 }
               }
@@ -12052,6 +12062,11 @@
           },
           "updated_at": {
             "type": "integer"
+          },
+          "local_path": {
+            "type": "string",
+            "nullable": true,
+            "description": "Absolute filesystem path of the project checkout (repo-less agent scan key)."
           }
         }
       }

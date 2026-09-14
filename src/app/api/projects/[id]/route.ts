@@ -51,7 +51,7 @@ export async function GET(
 
     const row = db.prepare(`
       SELECT p.id, p.workspace_id, p.name, p.slug, p.description, p.ticket_prefix, p.ticket_counter, p.status,
-             p.github_repo, p.deadline, p.color, p.github_sync_enabled, p.github_labels_initialized, p.github_default_branch, p.created_at, p.updated_at,
+             p.github_repo, p.deadline, p.color, p.github_sync_enabled, p.github_labels_initialized, p.github_default_branch, p.local_path, p.created_at, p.updated_at,
              (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) as task_count,
              (SELECT GROUP_CONCAT(paa.agent_name) FROM project_agent_assignments paa WHERE paa.project_id = p.id) as assigned_agents_csv
       FROM projects p
@@ -173,6 +173,12 @@ export async function PATCH(
       updates.push('github_labels_initialized = ?')
       paramsList.push(body.github_labels_initialized ? 1 : 0)
     }
+    // C4B/B1: local_path — see POST /api/projects. Explicit null clears it.
+    if (body?.local_path !== undefined || body?.localPath !== undefined) {
+      const raw = body.local_path ?? body.localPath
+      updates.push('local_path = ?')
+      paramsList.push(typeof raw === 'string' ? raw.trim() || null : null)
+    }
 
     if (updates.length === 0) return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
 
@@ -185,7 +191,7 @@ export async function PATCH(
 
     const project = db.prepare(`
       SELECT id, workspace_id, name, slug, description, ticket_prefix, ticket_counter, status,
-             github_repo, deadline, color, github_sync_enabled, github_labels_initialized, github_default_branch, created_at, updated_at
+             github_repo, deadline, color, github_sync_enabled, github_labels_initialized, github_default_branch, local_path, created_at, updated_at
       FROM projects
       WHERE id = ? AND workspace_id = ?
     `).get(projectId, workspaceId)
