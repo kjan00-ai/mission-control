@@ -5,8 +5,8 @@ date: 2026-09-15
 status: code-complete-owner-gated
 author: claude
 intent: spec
-round: 4
-genealogy: "v0.1 → L2(codex∥gemini, canonical 11 / settled 8 / escalate 0) → v0.2 → 구현 실측 4건 정정 → v0.3 → L2 r3(blocker1/imp5/sug4, 코드수정 2건) → v0.4"
+round: 5
+genealogy: "v0.1 → L2(codex∥gemini, canonical 11 / settled 8 / escalate 0) → v0.2 → 구현 실측 4건 정정 → v0.3 → L2 r3(blocker1/imp5/sug4, 코드수정 2건) → v0.4 → L2 r4(blocker0/imp4, 코드수정 1건) → v0.5 동결"
 artifact_ref: "docs/multiagent/specs/2026-09-15-mc-registration-transport-spec.md"
 refs:
   - "[[2026-09-14-windows-scaffold-parity-spec]]"
@@ -14,7 +14,7 @@ refs:
   - "[[mc-service-runtime-port]]"
 ---
 
-# 신규 프로젝트 MC 등록 transport — Windows 경로 복구 (spec v0.4 · 코드 완결 · 대표님 게이트 대기)
+# 신규 프로젝트 MC 등록 transport — Windows 경로 복구 (spec v0.5 · 동결 · 코드 완결 · 대표님 게이트 대기)
 
 > **v0.2 = L2 반영본.** codex∥gemini 2라운드, **심화 8건 전부 수렴·에스컬레이션 0**.
 > blocker 2건 중 하나(도달성 미실측)는 **실측으로 해소**했고, 다른 하나(엔드포인트 불일치)는 내 서술 누락이었다(§6).
@@ -99,7 +99,8 @@ resolveTransport() →
 - 기본 baseUrl 은 **`http://127.0.0.1:3005`** — 상시 systemd 서비스 포트다([[mc-service-runtime-port]]:
   dev 만 3000). `mc-mcp-server.cjs` 의 기본값 3000 을 그대로 복사하면 **평시에 연결 실패**한다.
   env·프로필이 있으면 그것이 우선이다.
-- `mode:'none'` 이면 **기존과 동일하게 조용히 skip + exit 0**. 부트스트랩을 절대 막지 않는다(보조 기능).
+- `mode:'none'` 이면 **신호 1줄(`<<AI_BOOTSTRAP_MC_UNCONFIGURED …>>`) + skip + exit 0**(v0.4, L2 f660bdf7).
+  부트스트랩을 절대 막지 않는다(보조 기능) — 그러나 **조용히 넘기지도 않는다**.
 
 ### 2.2 경로 정규화 — 중복 등록 방지 (L2 `8465ee9e`)
 
@@ -117,7 +118,7 @@ Windows 는 `D:\\Projects\\Ai-Insight\\ModuCare`, WSL 은 `/mnt/d/Projects/Ai-In
 | connection refused / timeout(5s) | skip. MC 정지 = 정상 상황 |
 | 401 / 403 | skip **+ 경고 신호** — 키가 틀렸다는 뜻이라 조용히 넘기면 영영 모른다 |
 | 409 conflict | 이미 존재로 간주, 성공 처리(경합 정상 종료) |
-| 5xx | 1회만 재시도(멱등 read 후), 그래도 실패면 skip + 경고 |
+| 5xx | 읽기는 곧바로 1회 재시도 · **쓰기는 멱등 read 로 반영 확인 후에만** 1회 재시도(§13 `b3a8a860`), 그래도 실패면 skip + 경고 |
 
 **모든 skip 은 `exit 0`** 이다(부트스트랩 차단 금지). 다만 **조용한 실패는 금지**한다 —
 2026-09-14 R1 에서 위키 누락에 적용한 것과 같은 규율을 여기에도 쓴다:
@@ -304,7 +305,7 @@ v0.2 §2.3 은 `409 conflict → 이미 존재로 간주, 성공 처리`였다. 
 1. **`!node ~/p1c/candidates/b1-mc-transport/apply-b1.js --check` → `--apply`** (T3 4파일)
 2. **API 키 발급 + Windows 프로필 배치** — `%USERPROFILE%\.mission-control\profiles\default.json`
    `{ "url": "http://127.0.0.1:3005", "apiKey": "<발급값>" }` · 권한 0600 · 매니페스트 `local`(동기 제외)
-   - 키가 없으면 `mode:'none'` 으로 **조용히 skip** 되고 부트스트랩은 정상 진행된다(오늘보다 나빠지지 않음)
+   - 키가 없으면 `mode:'none'` — **`mc=unconfigured` 신호 1줄을 내고** skip 되며 부트스트랩은 정상 진행된다(오늘보다 나빠지지 않음)
    - 에이전트 sync 는 **admin** 권한이 필요하다(§8.2) — agent-scoped 키를 쓸 경우 `admin` scope 필요
 3. 키 배치 후 **실 Windows 신규 프로젝트 1건 E2E**(`zz-e2e-<epoch>` 명명, 정확매칭 정리)
 
@@ -345,7 +346,7 @@ v0.2 §2.3 은 `409 conflict → 이미 존재로 간주, 성공 처리`였다. 
 ### 11.1 키 발급 · 프로필 배치
 
 - **프로젝트 등록만** 쓰려면 `operator` 이상, **즉시 에이전트 귀속**까지 쓰려면 `admin` scope 가 필요하다.
-  admin 이 부담이면 operator 로 두고 에이전트는 스케줄러(≤60s)에 맡기면 된다 — 결과는 같고 즉시성만 다르다.
+  admin 이 부담이면 operator 로 두고 에이전트는 스케줄러(≤60s)에 맡길 수 있다 — **단 그 폴백은 `general.project_agent_sync` 가 활성일 때만 성립한다**(§13 `fad8d41e`, 현 라이브 활성). 표는 §13 말미.
 - Windows: `%USERPROFILE%\.mission-control\profiles\default.json`
   ```json
   { "url": "http://127.0.0.1:3005", "apiKey": "<발급값>" }
@@ -384,3 +385,55 @@ v0.2 §2.3 은 `409 conflict → 이미 존재로 간주, 성공 처리`였다. 
 | 샌드박스 apply | `.ai-bootstrap` 복제본에 `--apply` 완주(배포·봉인 자동 생략) |
 
 ⚠️ **패치 범위가 3파일 → 4파일로 늘었다**: `init-project.sh` 가 추가됐다(이미 `gate-self-bootstrap` T3 이므로 glob 변경은 없다).
+
+---
+
+## 13. v0.5 — L2 round 4 반영 (blocker 0 / important 4 / suggest 2)
+
+집계 [[2026-09-15-mc-registration-transport-spec-l2-aggregation-20260915-090331]].
+**round 3 과 달리 blocker 가 0** 이고, 남은 것은 구현 불일치 1건·과장 보장 2건·확장성 의견 1건이었다.
+이번에도 **코드가 바뀐 반영 1건**과 **Windows 에서 실제로 돌려본 검증 1건**이 있다.
+
+| id | 지적 | 반영 |
+|---|---|---|
+| `b3a8a860` **important** | §2.3 은 "5xx 1회 재시도(멱등 read 후)"인데 구현은 첫 5xx 에서 즉시 포기 — **문서와 코드 불일치** | **정확한 지적. 코드를 문서에 맞췄다.** ①읽기(GET)는 부작용이 없으니 곧바로 1회 재시도 ②**쓰기는 5xx 후 먼저 멱등 read 로 실제 반영을 확인**하고 없을 때만 1회 재시도 — 5xx 는 쓰기 성공 후에도 나므로 무조건 재시도는 중복을 만든다 ③PATCH(고정값)·sync(upsert)는 멱등이라 곧바로 1회. 시험 5건 신설(**30/30**), 그중 `★5xx 쓰기: 실제로는 반영된 경우` 가 중복 POST 0 을 고정 |
+| `fad8d41e` **important** | "admin 없으면 ≤60s 뒤 스케줄러가 채운다"는 설정으로 끌 수 있어 **과장된 보장** | **맞다. 실측해서 문구를 내렸다.** `scheduler.ts:464,470` — `general.project_agent_sync` 설정을 보고 `isSettingEnabled(key, true)` 로 판정한다. **현재 라이브는 설정행이 없어 기본값 true = 활성**(DB 실측: 해당 키 0건). 그러나 끄면 스케줄러 경로가 사라지고 **즉시 sync 가 유일 경로**가 된다 → §11.1 을 "조건부 보장"으로 정정하고 조건을 명시 |
+| `2f03b9eb` **important** | `/inheritance:r /grant:r` 는 다른 **explicit ACE** 제거를 보장하지 않아 "소유자 한 줄" 검증 기준이 불충분 | **Windows 에서 실제로 돌려 재현했다.** ①갓 만든 파일의 ACE 는 전부 상속(`(I)`)이라 `/inheritance:r` 로 사라지고 결과는 정확히 한 줄(`LOTTORIA\Design:(F)`) — 우리 케이스(운영자가 새로 만드는 프로필)는 이 경로다 ②그러나 explicit ACE(`BUILTIN\Users:(R)`)를 일부러 넣고 재적용하면 **그 줄이 살아남는 것을 확인**했다 ③`/remove:g "BUILTIN\Users"` 로 제거되는 것까지 확인. → §11.1 절차에 **검증 후 잔존 줄 제거 단계**를 추가. (프로브 파일은 생성·검사 후 삭제) |
+| `1a23dfb0` **important** | 단일 `default.json` 프로필 의존은 다중 환경·다중 사용자에서 확장성 제한 | **의견을 수용하되 변경하지 않는다(근거 기재).** ①env `MC_URL`/`MC_API_KEY`/`MC_COOKIE` 가 프로필을 덮으므로 호출 단위 다중 환경은 **이미 가능**하다 ②`default.json` 은 `mc-mcp-server.cjs`·`mc-cli.cjs` 가 쓰는 **MC 기존 규약**이고, v0.2 가 명시적으로 "새 규약을 만들지 않는다"를 원칙으로 세웠다 ③named profile 은 MC 전역 기능 요청이라 본 spec 범위 밖(별건) |
+| `6e755f04` suggest | §2.1·§9 에 아직 "조용히 skip" 이 남아 v0.4 서술과 충돌 | 두 곳 문구 정정 — `mode:'none'` = **"신호 1줄 + skip + exit 0"** |
+| `1ffa0607` suggest | 신호 4종(미설정·지연·충돌·실패)이 경고 피로를 늘린다 | 설계 근거 기재: 신호는 **프로젝트 생성 1건당 최대 1줄**이고 마커의 `mc=` 는 **단일 상태값**이라 상호배타다(누적 알림 아님). 스캐폴딩은 신규 프로젝트에서만 돌아 빈도가 극히 낮다 |
+
+### v0.5 검증 실측 추가분
+
+| 항목 | 결과 |
+|---|---|
+| transport 단위 | **30/30** (+5xx 재시도 5건) |
+| 헬퍼 E2E · 스캐폴딩 E2E | **10/10** · **9/9** (재확인) |
+| Windows ACL 절차 | **실측 검증** — 상속 ACE 는 제거됨 / explicit ACE 는 잔존(재현) / `/remove:g` 로 제거 |
+| 스케줄러 폴백 전제 | **DB 실측** — `general.project_agent_sync` 설정행 0건 → 기본값 true(활성). 끌 수 있음도 코드로 확인 |
+| 게이트 회귀 | 241/241 · 127/127 · 25/25 |
+
+### 수렴 판정
+
+round 3 blocker 1 → round 4 blocker 0 · important 4(전건 반영) → **설계 blocker 소진**.
+남은 축은 구현 디테일·운영 의견으로 점근하고 있어([[l2-on-design-specs-asymptotes-to-impl-contracts]]) **여기서 spec 을 동결**한다.
+이후 검증은 문서 리뷰가 아니라 **대표님 `!` 적용 후의 실 Windows E2E** 가 담당한다.
+
+### 11.1 정정 — 권한 잠금 절차(실측본)
+
+```
+icacls "%USERPROFILE%\.mission-control\profiles\default.json" /inheritance:r /grant:r "%USERNAME%:F"
+icacls "%USERPROFILE%\.mission-control\profiles\default.json"
+        ↑ 검증: 사용자 한 줄만 남아야 한다. 다른 줄이 남았다면 그것은 explicit ACE 다:
+icacls "%USERPROFILE%\.mission-control\profiles\default.json" /remove:g "<그 principal>"
+        ↑ 제거 후 다시 검증
+```
+WSL 에 둘 경우는 `chmod 600 ~/.mission-control/profiles/default.json`.
+
+### 11.1 정정 — 에이전트 귀속 경로(조건부)
+
+| 키 권한 | 즉시 귀속 | 폴백 |
+|---|---|---|
+| `admin` | ✅ 등록 직후 sync | — |
+| `operator` | ❌ (403 → `deferred` 신호) | 스케줄러 `project_agent_sync` **≤60s** — **단 `general.project_agent_sync` 가 활성일 때만**(현 라이브: 활성) |
+| 그 설정이 꺼진 경우 | ❌ | **폴백 없음** — 이 경우 admin 키가 유일 경로다 |
